@@ -1,6 +1,10 @@
 // use core::pin::Pin;
 use core::fmt;
 use core::mem::size_of;
+mod heap;
+mod list;
+
+use heap::*;
 
 // #[derive(Debug)]
 // pub struct Mem<'a, const B: usize, const S: usize, const N: usize> {
@@ -194,87 +198,6 @@ fn test_align() {
     println!("m {:?}", m);
 }
 
-#[derive(Copy, Clone)]
-pub enum List<'a> {
-    Node(*const List<'a>, &'a [u8]),
-    Null,
-}
-
-impl<'a> List<'a> {
-    // this works for just push one node to the top
-    pub fn push(&'a self, m: &'a [u8]) -> List<'a> {
-        List::Node(self, m)
-    }
-
-    pub fn pop(&'a self) -> (List<'a>, &'a [u8]) {
-        match self {
-            List::Node(next, data) => (*List::to_list(*next), data),
-            _ => panic!(),
-        }
-    }
-
-    pub fn to_raw(&self) -> *const List {
-        &*self
-    }
-
-    pub fn to_list(l: *const List<'a>) -> &List<'a> {
-        unsafe { &*(l as *const List<'a>) }
-    }
-}
-
-impl<'a> fmt::Debug for List<'a> {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(
-            f,
-            "{}",
-            match self {
-                List::Node(l, m) => format!("Node ({:?}, {:?})", m, List::to_list(*l)),
-                _ => "Null".to_string(),
-            }
-        )
-    }
-}
-
-#[cfg(test)]
-mod test {
-    use super::*;
-    use core::mem::size_of_val;
-
-    #[test]
-    fn test_list() {
-        let l = List::Null;
-        println!("l {:?}", l);
-
-        let l = l.push(&[1]);
-        println!("l {:?}", l);
-
-        let l = l.push(&[2]);
-        println!("l {:?}", l);
-
-        let (l, d) = l.pop();
-        println!("l {:?}, d {:?}", l, d);
-
-        let (l, d) = l.pop();
-        println!("l {:?}, d {:?}", l, d);
-    }
-
-    // #[test]
-    // fn test_m() {
-    //     let mut mem: Mem<16, 2, 2> = Mem::new();
-    //     mem.init();
-
-    //     println!("m {:?}", mem);
-    // }
-
-    #[test]
-    fn test() {
-        let i = 1;
-        let t = move |j: i32| j + i;
-
-        println!("t {}", size_of_val(&t));
-    }
-}
-
 // crazy idea
 #[repr(transparent)]
 pub struct RacyCell<T>(UnsafeCell<T>);
@@ -333,9 +256,11 @@ impl Heap {
 
         let size = size_of::<T>();
         let align = align_of::<T>();
-        println!("size {}, align {}", size, align);
-
         let spill = start % align;
+        println!(
+            "start {:x}, size {}, align {}, spill {}",
+            start, size, align, spill
+        );
 
         if spill != 0 {
             start += align - spill;
@@ -368,6 +293,11 @@ fn test_heap() {
     println!("free {}", HEAP.free_size());
 
     let p = HEAP.alloc(1u8);
+    println!("p {}", p);
 
+    let p = HEAP.alloc([0u8, 1]);
+    println!("p {:?}", p);
+
+    let p = HEAP.alloc(1u32);
     println!("p {}", p);
 }
