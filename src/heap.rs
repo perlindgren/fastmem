@@ -1,14 +1,7 @@
-use core::cell::UnsafeCell;
-
+use core::cell::{Cell, UnsafeCell};
 use core::fmt::Debug;
-
-use core::cell::Cell;
 use core::mem::{align_of, size_of, transmute};
 
-// use core::ops::{Deref, DerefMut, Drop};
-// use std::mem::MaybeUninit;
-
-// crazy idea
 #[repr(transparent)]
 pub struct RacyCell<T>(UnsafeCell<T>);
 

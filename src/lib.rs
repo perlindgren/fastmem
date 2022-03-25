@@ -2,9 +2,10 @@
 use core::fmt;
 use core::mem::size_of;
 mod heap;
-mod list;
+mod stack;
 
 use heap::*;
+use stack::*;
 
 // #[derive(Debug)]
 // pub struct Mem<'a, const B: usize, const S: usize, const N: usize> {

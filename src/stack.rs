@@ -49,18 +49,22 @@ impl Stack {
     pub const fn new() -> Self {
         Stack { head: None }
     }
-    // this works for just push one node to the top
+
+    /// push a node to the top of the stack
     pub fn push(&mut self, n: &mut Node) {
         n.next = self.head;
         self.head = NonNull::new(n)
     }
 
+    /// pop a node from the top of the stack
     pub fn pop(&mut self) -> Option<&mut Node> {
         match self.head {
             Some(mut node) => {
                 let node = unsafe { node.as_mut() };
                 self.head = node.next;
 
+                // erase the tail of the top node to return
+                node.next = None;
                 Some(node)
             }
             None => None,
