@@ -2,10 +2,10 @@ use core::cell::Cell;
 use core::fmt;
 use core::ptr::NonNull;
 
-#[derive(Copy, Clone, Debug, PartialEq)]
+#[derive(Clone, Debug, PartialEq)]
 pub struct Node {
     data: usize,
-    next: Cell<Option<NonNull<Node>>>,
+    next: Option<NonNull<Node>>,
 }
 
 impl Node {
@@ -14,61 +14,30 @@ impl Node {
     }
 }
 
-impl fmt::Display for Node {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(
-            f,
-            "({}, {})",
-            self.data,
-            match self.next {
-                Some(node) => {
-                    let node = unsafe { node.as_ref() };
-                    format!("{:?}", node)
-                }
-                None => "None".to_string(),
-            }
-        )
-    }
-}
-
-#[derive(Copy, Clone, Debug, PartialEq)]
+#[derive(Clone, Debug, PartialEq)]
 pub struct Stack {
-    pub head: Option<NonNull<Node>>,
-}
-
-impl fmt::Display for Stack {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(
-            f,
-            "Stack({})",
-            match self.head {
-                Some(node) => {
-                    let node = unsafe { node.as_ref() };
-                    format!("{}", node)
-                }
-                None => "None".to_string(),
-            }
-        )
-    }
+    pub head: Cell<Option<NonNull<Node>>>,
 }
 
 impl Stack {
     pub const fn new() -> Self {
-        Stack { head: None }
+        Stack {
+            head: Cell::new(None),
+        }
     }
 
     /// push a node to the top of the stack
-    pub fn push(&mut self, n: &mut Node) {
-        n.next.set(self.head);
-        self.head = NonNull::new(n)
+    pub fn push(&self, n: &mut Node) {
+        n.next = self.head.get();
+        self.head.set(NonNull::new(n));
     }
 
     /// pop a node from the top of the stack
     pub fn pop(&mut self) -> Option<&mut Node> {
-        match self.head {
+        match self.head.get() {
             Some(mut node) => {
                 let node = unsafe { node.as_mut() };
-                self.head = node.next;
+                self.head.set(node.next);
 
                 // erase the tail of the top node to return
                 node.next = None;
@@ -93,24 +62,59 @@ mod test {
 
     #[test]
     fn test_list() {
-        let mut stack = Stack::new();
+        let stack = Stack::new();
 
-        let mut n1 = Node::new(1);
+        let n1 = Node::new(&mut 0);
         stack.push(&mut n1);
 
-        let mut n2 = Node::new(2);
+        let n2 = Node::new(&mut d2);
         stack.push(&mut n2);
 
         let n = stack.pop().unwrap();
         assert_eq!(n.data, 2);
-        assert_eq!(n.next, None);
+        assert_eq!(n.next.get(), None);
 
         let n = stack.pop().unwrap();
         assert_eq!(n.data, 1);
-        assert_eq!(n.next, None);
+        assert_eq!(n.next.get(), None);
 
         let n = stack.pop();
         assert_eq!(n, None);
-        assert_eq!(stack.head, None);
+        assert_eq!(stack.head.get(), None);
+    }
+}
+
+// helpers
+
+impl fmt::Display for Node {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(
+            f,
+            "({}, {})",
+            self.data,
+            match self.next {
+                Some(node) => {
+                    let node = unsafe { node.as_ref() };
+                    format!("{:?}", node)
+                }
+                None => "None".to_string(),
+            }
+        )
+    }
+}
+
+impl fmt::Display for Stack {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(
+            f,
+            "Stack({})",
+            match self.head.get() {
+                Some(node) => {
+                    let node = unsafe { node.as_ref() };
+                    format!("{}", node)
+                }
+                None => "None".to_string(),
+            }
+        )
     }
 }
