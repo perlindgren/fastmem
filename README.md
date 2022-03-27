@@ -102,7 +102,7 @@ As mentioned the allocator could be const generic to the max-size (`free_stacks:
 
 ## Limitations and intended "semi static" use
 
-As seen there is no true de-allocation, just re-cycling for sake of performance. In highly dynamic workloads this will be wasteful of resources (memory) but the intention is to use `fastmem` for hard real-time systems, which are typically less dynamic regarding allocation requirements. A typical use case is to store messages (closures) or async futures. While these are dynamic in size (unsized at compile time), there will be limited set of recurring fix sized messages and futures in the system. For a fixed set of futures (async tasks, these can be dynamically allocated at startup).
+As seen there is no true de-allocation, just re-cycling for sake of performance. For highly dynamic workloads this will be wasteful of resources (memory) but the intention is to use `fastmem` for hard real-time systems, which are typically less dynamic regarding allocation requirements. A typical use case is to store messages (closures) or async futures. While these are dynamic in size (unsized at compile time), there will be limited set of recurring fix sized messages and futures in the system. For a fixed set of futures (async tasks, these can be dynamically allocated at startup).
 
 ## Disclaimer: A two day hack
 
