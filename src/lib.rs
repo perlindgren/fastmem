@@ -18,30 +18,23 @@ use my_box::*;
 use stack::*;
 
 #[derive(Debug)]
-pub struct Initialized;
-#[derive(Debug)]
-pub struct UnUnitialized;
-
-#[derive(Debug)]
 #[repr(C)]
-pub struct Alloc<T> {
+pub struct AllocTmp {
     pub heap: &'static Heap,
     pub free_stacks: MaybeUninit<[Stack; 128]>,
-    _state: PhantomData<T>,
 }
 
-unsafe impl<T> Sync for Alloc<T> {}
+unsafe impl Sync for AllocTmp {}
 
-impl Alloc<UnUnitialized> {
+impl AllocTmp {
     pub const fn new(heap: &'static Heap) -> Self {
-        Alloc {
+        AllocTmp {
             heap,
             free_stacks: MaybeUninit::uninit(),
-            _state: PhantomData,
         }
     }
 
-    pub fn init(&self) -> &Alloc<Initialized> {
+    pub fn init(&self) -> &Alloc {
         let free_stacks = unsafe { &*self.free_stacks.as_ptr() };
 
         for stack in free_stacks.iter() {
@@ -52,32 +45,36 @@ impl Alloc<UnUnitialized> {
     }
 }
 
-impl Alloc<Initialized> {
-    // pub fn box_new<T>(&'static self, t: T) -> Box<&mut T> {
-    //     let size = size_of::<T>();
-    //     println!("box_new, size {}", size);
+#[derive(Debug)]
+#[repr(C)]
+pub struct Alloc {
+    pub heap: &'static Heap,
+    pub free_stacks: [Stack; 128],
+}
 
-    //     let free_list = unsafe { &*self.free_list.get() };
+impl Alloc {
+    pub fn box_new<T>(&'static self, t: T) -> Box<&mut T> {
+        let index = size_of::<T>();
+        println!("box_new, index {}", index);
 
-    //     match free_list[size].head.get() {
-    //         Some(node) => {
-    //             panic!("node {:?}", node)
-    //         }
-    //         None => {
-    //             println!("new allocation");
-    //             let n = self.heap.alloc(t);
-    //             let n_addr = n as *const T as usize;
-    //             let n_node = self.heap.alloc(Node::new(n_addr));
-    //             Box::new(n, self, n_node)
-    //         }
-    //     }
-    // }
+        match self.free_stacks[index].head.get() {
+            Some(node) => {
+                panic!("node {:?}", node)
+            }
+            None => {
+                println!("new allocation");
+                let n = self.heap.alloc(t);
+                let n_addr = n as *const T as usize;
+                let n_node = self.heap.alloc(Node::new(n_addr));
+                Box::new(n, self, n_node)
+            }
+        }
+    }
 
     pub fn free<T>(&self, my_box: &mut Box<T>) {
-        println!("free your ass and you mind will follow");
-        let size = size_of::<T>();
-        // let free_list = unsafe { &mut *self.free_list.get() };
-        // free_list[size].push(my_box.node);
+        let index = size_of::<T>();
+        println!("box_free, index {}", index);
+        self.free_stacks[index].push(my_box.node);
     }
 }
 

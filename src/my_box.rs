@@ -6,11 +6,11 @@ use core::ops::{Deref, DerefMut, Drop};
 pub struct Box<T> {
     pub inner: T,
     pub allocator: &'static Alloc,
-    pub node: &'static Node,
+    pub node: &'static mut Node,
 }
 
 impl<T> Box<T> {
-    pub const fn new(t: T, allocator: &'static Alloc, node: &'static Node) -> Self {
+    pub fn new(t: T, allocator: &'static Alloc, node: &'static mut Node) -> Self {
         Self {
             inner: t,
             allocator,
