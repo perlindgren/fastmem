@@ -60,19 +60,14 @@ impl Heap {
         let size = size_of::<T>();
         let align = align_of::<T>();
         let spill = start % align;
-        println!(
-            "start {:x}, size {}, align {}, spill {}",
-            start, size, align, spill
-        );
 
         if spill != 0 {
             start += align - spill;
         }
 
-        println!("start {:x}", start);
         let new_start = start + size;
         if new_start > self.end.get() {
-            panic!("oom");
+            panic!("Out of memory (OOM)");
         }
 
         let r: &mut T = unsafe { transmute::<_, &mut T>(start) };
@@ -84,21 +79,51 @@ impl Heap {
     }
 }
 
-pub static HEAP: Heap = Heap::new();
-pub static HEAP_DATA: RacyCell<[u8; 128]> = RacyCell::new([0; 128]);
+#[cfg(test)]
+mod test {
+    #[test]
+    fn test_heap() {
+        use super::*;
+        pub static HEAP: Heap = Heap::new();
+        pub static HEAP_DATA: RacyCell<[u8; 128]> = RacyCell::new([0; 128]);
+        HEAP.init(&HEAP_DATA);
+        let start = HEAP.start.get();
+        let end = HEAP.end.get();
+        assert_eq!(HEAP.free_size(), end - start);
 
-#[test]
-fn test_heap() {
-    HEAP.init(&HEAP_DATA);
-    println!("H {:x?}", HEAP);
-    println!("free {}", HEAP.free_size());
+        // 0000 A B B _
+        // 0004 C C C C
+        // 0008 D D D D
+        // 000c D D _ _
+        // 0010 E E E E
 
-    let p = HEAP.alloc(1u8);
-    println!("p {}", p);
+        // A u8
+        let p = HEAP.alloc(1u8);
+        assert_eq!(*p, 1);
+        assert_eq!(p as *const _ as usize, start);
 
-    let p = HEAP.alloc([0u8, 1]);
-    println!("p {:?}", p);
+        // B [u2; 1]
+        // start with offset 1, no padding, byte array byte aligned
+        let p = HEAP.alloc([0u8, 1]);
+        assert_eq!(p, &[0, 1]);
+        assert_eq!(p as *const _ as usize, start + 1);
 
-    let p = HEAP.alloc(1u32);
-    println!("p {}", p);
+        // C u32
+        // check padding, with 1
+        let p = HEAP.alloc(0x1234_5678u32);
+        assert_eq!(*p, 0x1234_5678u32);
+        assert_eq!(p as *const _ as usize, start + 4);
+
+        // D [u16; 3]
+        // start with offset 1, no padding, byte array byte aligned
+        let p = HEAP.alloc([0u16, 1, 2]);
+        assert_eq!(p, &[0, 1, 2]);
+        assert_eq!(p as *const _ as usize, start + 8);
+
+        // E u32
+        // start with offset 1, no padding, byte array byte aligned
+        let p = HEAP.alloc(0x1234_5678u32);
+        assert_eq!(*p, 0x1234_5678u32);
+        assert_eq!(p as *const _ as usize, start + 0x10);
+    }
 }

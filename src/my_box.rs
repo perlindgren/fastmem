@@ -35,7 +35,7 @@ impl<T> DerefMut for Box<T> {
 
 impl<T> Drop for Box<T> {
     fn drop(&mut self) {
-        println!("Dropping HasDrop!");
+        println!("Dropping box");
         self.allocator.free(self);
     }
 }

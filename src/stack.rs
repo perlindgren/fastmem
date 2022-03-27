@@ -33,7 +33,7 @@ impl Stack {
     }
 
     /// pop a node from the top of the stack
-    pub fn pop(&mut self) -> Option<&mut Node> {
+    pub fn pop(&self) -> Option<&mut Node> {
         match self.head.get() {
             Some(mut node) => {
                 let node = unsafe { node.as_mut() };
@@ -64,19 +64,19 @@ mod test {
     fn test_list() {
         let stack = Stack::new();
 
-        let n1 = Node::new(&mut 0);
+        let mut n1 = Node::new(1);
         stack.push(&mut n1);
 
-        let n2 = Node::new(&mut d2);
+        let mut n2 = Node::new(2);
         stack.push(&mut n2);
 
         let n = stack.pop().unwrap();
         assert_eq!(n.data, 2);
-        assert_eq!(n.next.get(), None);
+        assert_eq!(n.next, None);
 
         let n = stack.pop().unwrap();
         assert_eq!(n.data, 1);
-        assert_eq!(n.next.get(), None);
+        assert_eq!(n.next, None);
 
         let n = stack.pop();
         assert_eq!(n, None);
