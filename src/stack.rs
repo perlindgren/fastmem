@@ -4,7 +4,7 @@ use core::ptr::NonNull;
 
 #[derive(Clone, Debug, PartialEq)]
 pub struct Node {
-    data: usize,
+    pub data: usize,
     next: Option<NonNull<Node>>,
 }
 
@@ -27,12 +27,14 @@ impl Stack {
     }
 
     /// push a node to the top of the stack
+    #[inline(always)]
     pub fn push(&self, n: &mut Node) {
         n.next = self.head.get();
         self.head.set(NonNull::new(n));
     }
 
     /// pop a node from the top of the stack
+    #[inline(always)]
     pub fn pop(&self) -> Option<&mut Node> {
         match self.head.get() {
             Some(mut node) => {
@@ -90,7 +92,7 @@ impl fmt::Display for Node {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         write!(
             f,
-            "({}, {})",
+            "({:x}, {})",
             self.data,
             match self.next {
                 Some(node) => {

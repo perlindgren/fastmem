@@ -1,12 +1,6 @@
-// use core::pin::Pin;
-use core::cell::UnsafeCell;
-use core::fmt;
 use core::fmt::Debug;
-use core::mem::align_of;
 use core::mem::size_of;
 use core::mem::transmute;
-use core::ops::{Deref, DerefMut, Drop};
-use std::marker::PhantomData;
 use std::mem::MaybeUninit;
 
 mod heap;
@@ -53,24 +47,31 @@ pub struct Alloc {
 }
 
 impl Alloc {
-    pub fn box_new<T>(&'static self, t: T) -> Box<&mut T> {
+    #[inline(always)]
+    pub fn box_new<T>(&'static self, t: T) -> Box<T> {
         let index = size_of::<T>();
         println!("box_new, index {}", index);
 
-        match self.free_stacks[index].head.get() {
+        match self.free_stacks[index].pop() {
             Some(node) => {
-                panic!("node {:?}", node)
+                println!("found node, n_addr {:x}", node.data);
+                let data = unsafe { &mut *(&mut *(node.data as *mut T)) };
+                *data = t;
+
+                Box::new(data, self, node)
             }
             None => {
                 println!("new allocation");
                 let n = self.heap.alloc(t);
                 let n_addr = n as *const T as usize;
+                println!("n_addr {:x}", n_addr);
                 let n_node = self.heap.alloc(Node::new(n_addr));
                 Box::new(n, self, n_node)
             }
         }
     }
 
+    #[inline(always)]
     pub fn free<T>(&self, my_box: &mut Box<T>) {
         let index = size_of::<T>();
         println!("box_free, index {}", index);
@@ -78,42 +79,33 @@ impl Alloc {
     }
 }
 
-// #[cfg(test)]
-// mod test {
-//     use super::*;
-//     use core::mem::size_of_val;
+#[cfg(test)]
+mod test {
+    use super::*;
+    use core::mem::drop;
+    use core::mem::size_of_val;
 
-//     #[test]
-//     fn test_alloc() {
-//         pub static HEAP: Heap = Heap::new();
-//         pub static HEAP_DATA: RacyCell<[u8; 128]> = RacyCell::new([0; 128]);
-//         HEAP.init(&HEAP_DATA);
-//         pub static ALLOC: Alloc = Alloc::new(&HEAP);
+    #[test]
+    fn test_alloc() {
+        pub static HEAP: Heap = Heap::new();
+        pub static HEAP_DATA: RacyCell<[u8; 128]> = RacyCell::new([0; 128]);
+        HEAP.init(&HEAP_DATA);
+        pub static ALLOC: AllocTmp = AllocTmp::new(&HEAP);
+        let alloc = ALLOC.init();
 
-//         let n = ALLOC.box_new(1);
-//     }
+        let n_u8 = alloc.box_new(8u8);
+        println!("n_u8 {}", *n_u8);
 
-//     #[test]
-//     fn test_heap_stack() {
-//         pub static HEAP: Heap = Heap::new();
-//         pub static HEAP_DATA: RacyCell<[u8; 128]> = RacyCell::new([0; 128]);
-//         HEAP.init(&HEAP_DATA);
+        let n_u32 = alloc.box_new(32u32);
+        println!("n_u32 {}", *n_u32);
 
-//         let mut s = Stack::new();
+        drop(n_u8); // force drop
+        drop(n_u32); // force drop
 
-//         let n = Node::new(0);
-//         println!("n {}", size_of_val(&n));
+        let n_u8 = alloc.box_new(8u8);
+        println!("n_u8 {}", *n_u8);
 
-//         let n1 = HEAP.alloc(Node::new(1));
-//         s.push(n1);
-//         println!("s {}", s);
-
-//         let n2 = HEAP.alloc(Node::new(2));
-//         s.push(n2);
-//         println!("s {}", s);
-
-//         let n3 = HEAP.alloc(Node::new(3));
-//         s.push(n3);
-//         println!("s {}", s);
-//     }
-// }
+        let n_u32 = alloc.box_new(32u32);
+        println!("n_u32 {}", *n_u32);
+    }
+}

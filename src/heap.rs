@@ -54,7 +54,9 @@ impl Heap {
     }
 
     // Allocate and initialize T
+    #[inline(always)]
     pub fn alloc<T>(&self, t: T) -> &mut T {
+        println!("alloc {}", size_of::<T>());
         let mut start = self.start.get();
 
         let size = size_of::<T>();
@@ -62,6 +64,7 @@ impl Heap {
         let spill = start % align;
 
         if spill != 0 {
+            println!("pad {}", align - spill);
             start += align - spill;
         }
 
