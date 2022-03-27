@@ -8,28 +8,28 @@ By example:
 
 ```rust
 #[test]
-    fn test_alloc() {
-        pub static HEAP: Heap = Heap::new();
-        pub static HEAP_DATA: RacyCell<[u8; 128]> = RacyCell::new([0; 128]);
-        HEAP.init(&HEAP_DATA);
-        pub static ALLOC: AllocTmp = AllocTmp::new(&HEAP);
-        let alloc = ALLOC.init();
+fn test_alloc() {
+    pub static HEAP: Heap = Heap::new();
+    pub static HEAP_DATA: RacyCell<[u8; 128]> = RacyCell::new([0; 128]);
+    HEAP.init(&HEAP_DATA);
+    pub static ALLOC: AllocTmp = AllocTmp::new(&HEAP);
+    let alloc = ALLOC.init();
 
-        let n_u8 = alloc.box_new(8u8);
-        println!("n_u8 {}", *n_u8);
+    let n_u8 = alloc.box_new(8u8);
+    println!("n_u8 {}", *n_u8);
 
-        let n_u32 = alloc.box_new(32u32);
-        println!("n_u32 {}", *n_u32);
+    let n_u32 = alloc.box_new(32u32);
+    println!("n_u32 {}", *n_u32);
 
-        drop(n_u8); // force drop
-        drop(n_u32); // force drop
+    drop(n_u8); // force drop
+    drop(n_u32); // force drop
 
-        let n_u8 = alloc.box_new(8u8);
-        println!("n_u8 {}", *n_u8);
+    let n_u8 = alloc.box_new(8u8);
+    println!("n_u8 {}", *n_u8);
 
-        let n_u32 = alloc.box_new(32u32);
-        println!("n_u32 {}", *n_u32);
-    }
+    let n_u32 = alloc.box_new(32u32);
+    println!("n_u32 {}", *n_u32);
+}
 ```
 
 The `Heap` data structure holds two raw pointers to the beginning and end of the heap. These could possibly be tied to link script symbols, but for now we set them based on a static allocation of data, in `HEAP_DATA`.
@@ -43,6 +43,7 @@ What makes `fastmem` fast is that data is never really de-allocated but rather r
 Taken from the implementation:
 
 ``` rust
+    ...
     pub fn box_new<T>(&'static self, t: T) -> Box<T> {
         let index = size_of::<T>();
         println!("box_new, index {}", index);
@@ -66,6 +67,7 @@ Taken from the implementation:
             }
         }
     }
+    ...
 ```
 `index` is computed based on the size of `T` (the size of the data we want to allocate). We select the appropriate stack by indexing the array `self.free_stacks`, and `pop`.
 
