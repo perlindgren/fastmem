@@ -32,6 +32,7 @@ pub struct Heap {
 unsafe impl Sync for Heap {}
 
 impl Heap {
+    // Create a new uninitialized heap
     pub const fn new() -> Self {
         Self {
             start: Cell::new(0),
@@ -39,6 +40,7 @@ impl Heap {
         }
     }
 
+    // Initialize heap from static storage
     pub fn init<T>(&self, store: &'static T) {
         let start = store as *const T as usize;
         let end = start + size_of::<T>();
@@ -46,14 +48,13 @@ impl Heap {
         self.end.set(end);
     }
 
+    // Report the free memory in bytes
     pub fn free_size(&self) -> usize {
         self.end.get() - self.start.get()
     }
 
-    fn alloc<T>(&self, t: T) -> &mut T
-    where
-        T: Debug,
-    {
+    // Allocate and initialize T
+    pub fn alloc<T>(&self, t: T) -> &mut T {
         let mut start = self.start.get();
 
         let size = size_of::<T>();
@@ -79,8 +80,6 @@ impl Heap {
 
         self.start.set(new_start);
         *r = t;
-        println!("r {:?}", r);
-
         r
     }
 }

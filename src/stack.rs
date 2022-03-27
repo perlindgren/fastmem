@@ -1,10 +1,17 @@
+use core::cell::Cell;
 use core::fmt;
 use core::ptr::NonNull;
 
-#[derive(Copy, Clone, Debug)]
+#[derive(Copy, Clone, Debug, PartialEq)]
 pub struct Node {
     data: usize,
-    next: Option<NonNull<Node>>,
+    next: Cell<Option<NonNull<Node>>>,
+}
+
+impl Node {
+    pub const fn new(data: usize) -> Self {
+        Node { data, next: None }
+    }
 }
 
 impl fmt::Display for Node {
@@ -16,7 +23,7 @@ impl fmt::Display for Node {
             match self.next {
                 Some(node) => {
                     let node = unsafe { node.as_ref() };
-                    format!("{}", node)
+                    format!("{:?}", node)
                 }
                 None => "None".to_string(),
             }
@@ -24,9 +31,9 @@ impl fmt::Display for Node {
     }
 }
 
-#[derive(Copy, Clone, Debug)]
+#[derive(Copy, Clone, Debug, PartialEq)]
 pub struct Stack {
-    head: Option<NonNull<Node>>,
+    pub head: Option<NonNull<Node>>,
 }
 
 impl fmt::Display for Stack {
@@ -52,7 +59,7 @@ impl Stack {
 
     /// push a node to the top of the stack
     pub fn push(&mut self, n: &mut Node) {
-        n.next = self.head;
+        n.next.set(self.head);
         self.head = NonNull::new(n)
     }
 
@@ -86,52 +93,24 @@ mod test {
 
     #[test]
     fn test_list() {
-        let mut l = Stack::new();
-        println!("l {}", l);
-        let mut n = Node {
-            data: 0,
-            next: None,
-        };
+        let mut stack = Stack::new();
 
-        l.push(&mut n);
-        println!("l {}", l);
-        println!("n {}", n);
+        let mut n1 = Node::new(1);
+        stack.push(&mut n1);
 
-        let mut n2 = Node {
-            data: 1,
-            next: None,
-        };
+        let mut n2 = Node::new(2);
+        stack.push(&mut n2);
 
-        l.push(&mut n2);
+        let n = stack.pop().unwrap();
+        assert_eq!(n.data, 2);
+        assert_eq!(n.next, None);
 
-        println!("l {}", l);
+        let n = stack.pop().unwrap();
+        assert_eq!(n.data, 1);
+        assert_eq!(n.next, None);
 
-        let n = l.pop().unwrap();
-        println!("n {}", n);
-        println!("l {}", l);
-
-        let n = l.pop().unwrap();
-        println!("n {}", n);
-        println!("l {}", l);
-
-        let n = l.pop();
-        println!("n {:?}", n);
-        println!("l {}", l);
-    }
-
-    // #[test]
-    // fn test_m() {
-    //     let mut mem: Mem<16, 2, 2> = Mem::new();
-    //     mem.init();
-
-    //     println!("m {:?}", mem);
-    // }
-
-    #[test]
-    fn test() {
-        let i = 1;
-        let t = move |j: i32| j + i;
-
-        println!("t {}", size_of_val(&t));
+        let n = stack.pop();
+        assert_eq!(n, None);
+        assert_eq!(stack.head, None);
     }
 }
