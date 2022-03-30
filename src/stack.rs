@@ -1,32 +1,34 @@
 use core::cell::Cell;
 use core::fmt;
-use core::fmt::Debug;
-use core::fmt::Display;
 use core::mem::transmute;
 use core::ptr::NonNull;
 
-// Next field first, so we can transmute any Node<T> to Node<()>
-// (Assuming we never touch the data field)
+// Next field first, so we have a stable location
+//
+// The `next` field is used as a raw pointer
+// to refer to the next Node on the stack.
+//
+// The `data' field holds the allocated data.
 #[derive(Clone, Debug, PartialEq)]
 #[repr(C)]
-pub struct Node<T> {
-    pub next: Option<NonNull<usize>>,
-    pub data: T,
+pub(crate) struct Node<T> {
+    pub(crate) next: Option<NonNull<usize>>,
+    pub(crate) data: T,
 }
 
 impl<T> Node<T> {
-    pub const fn new(data: T) -> Self {
+    const fn new(data: T) -> Self {
         Node { next: None, data }
     }
 }
 
 #[derive(Clone, Debug, PartialEq)]
 pub struct Stack {
-    pub head: Cell<Option<NonNull<usize>>>,
+    pub(crate) head: Cell<Option<NonNull<usize>>>,
 }
 
 impl Stack {
-    pub const fn new() -> Self {
+    pub(crate) const fn new() -> Self {
         Stack {
             head: Cell::new(None),
         }
@@ -34,22 +36,24 @@ impl Stack {
 
     /// push a node to the top of the stack
     #[inline(always)]
-    pub fn push<T>(&self, n: &mut Node<T>) {
-        println!("push self @{:p}, node @{:p}", self, n);
-        n.next = self.head.get();
-        self.head.set(NonNull::new(unsafe { transmute(n) }));
+    pub(crate) fn push<T>(&self, node: &mut Node<T>) {
+        node.next = self.head.get();
+        self.head.set(NonNull::new(unsafe { transmute(node) }));
     }
 
     /// pop a node from the top of the stack
     #[inline(always)]
-    pub fn pop<T>(&self) -> Option<&mut Node<T>> {
+    pub(crate) fn pop<T>(&self) -> Option<&mut Node<T>> {
         match self.head.get() {
             Some(node) => {
+                // Safety: size_of<T> <= size of data for the node
                 let node: &mut Node<T> = unsafe { transmute(node) };
                 self.head.set(node.next);
 
-                // erase the tail of the top node to return
-                node.next = None;
+                // Optionally: erase the tail of the top node to return
+                // node.next = None;
+                //
+                // (`next` field will be set on push)
                 Some(node)
             }
             None => None,
@@ -73,28 +77,25 @@ mod test {
     fn test_stack_nodes() {
         let stack = Stack::new();
 
-        println!("{}", stack);
+        // println!("{}", stack);
 
         let mut n1 = Node::new(42);
-        println!("n1 {}", n1);
+        // println!("n1 {}", n1);
 
         let mut n2 = Node::new([1, 2, 3, 4]);
-        println!("n2 {:?}", n2);
-        // n1.next = unsafe { transmute(&n2) };
-
-        println!("n2 {}", n2);
+        // println!("n2 {:?}", n2);
 
         stack.push(&mut n1);
-        println!("{}", stack);
+        // println!("{}", stack);
 
         stack.push(&mut n2);
-        println!("{}", stack);
+        // println!("{}", stack);
 
         let new_n2: &mut Node<[i32; 4]> = stack.pop().unwrap();
-        println!("new_n2 {:?}", new_n2);
+        // println!("new_n2 {:?}", new_n2);
 
         let new_n1: &mut Node<i32> = stack.pop().unwrap();
-        println!("new_n1 {:?}", new_n1);
+        // println!("new_n1 {:?}", new_n1);
 
         assert_eq!(stack.head.get(), None);
     }
@@ -103,11 +104,14 @@ mod test {
     #[test]
     fn test_stack_box() {
         static mut N1: Node<i32> = Node::new(42);
-        let stack = Stack::new();
 
-        println!("n1 {}", unsafe { &N1 });
+        // println!("n1 {:?}", unsafe { &N1 });
         let b1 = Box::new(unsafe { &mut N1 });
-        println!("b1 {:?}", b1);
+        // println!("b1 {:?}", b1);
+
+        // Will never be pushed back on stack
+        // leaking!
+        core::mem::forget(b1);
     }
 }
 
@@ -116,33 +120,24 @@ mod test {
 // We assume a ZST and never print the data field.
 impl<T> fmt::Display for Node<T> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(
-            f,
-            "(data, {})",
-            match self.next {
-                Some(node) => {
-                    let node: &Node<()> = unsafe { transmute(node) };
-                    format!("{}", node)
-                }
-                None => "None".to_string(),
+        match self.next {
+            Some(node) => {
+                let node: &Node<()> = unsafe { transmute(node) };
+                core::fmt::write(f, format_args!("{}", node))
             }
-        )
+            None => core::fmt::write(f, format_args!("None")),
+        }
     }
 }
 
 impl fmt::Display for Stack {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(
-            f,
-            "Stack @{:p}: ({})",
-            self,
-            match self.head.get() {
-                Some(node) => {
-                    let node: &Node<()> = unsafe { transmute(node) };
-                    format!("{}", node)
-                }
-                None => "None".to_string(),
+        match self.head.get() {
+            Some(node) => {
+                let node: &Node<()> = unsafe { transmute(node) };
+                core::fmt::write(f, format_args!("{}", node))
             }
-        )
+            None => core::fmt::write(f, format_args!("None")),
+        }
     }
 }
