@@ -51,32 +51,30 @@ impl Alloc {
     pub fn box_new<T>(&'static self, t: T) -> Box<T> {
         let index = size_of::<T>();
         println!("box_new, index {}", index);
-
-        match self.free_stacks[index].pop() {
+        println!("node size {}", size_of::<Node<T>>());
+        let stack = &self.free_stacks[index];
+        let node: &mut Node<T> = match stack.pop() {
             Some(node) => {
-                println!("found node, n_addr {:x}", node.data);
-                let data = unsafe { &mut *(node.data as *mut T) };
-                *data = t;
-
-                Box::new(data, self, node)
+                println!("found node");
+                node
             }
             None => {
                 println!("new allocation");
-                let n = self.heap.alloc(t);
-                let n_addr = n as *const T as usize;
-                println!("n_addr {:x}", n_addr);
-                let n_node = self.heap.alloc(Node::new(n_addr));
-                Box::new(n, self, n_node)
+                self.heap.alloc()
             }
-        }
+        };
+        node.data = t;
+        node.next = unsafe { transmute(stack) };
+
+        Box::new(node)
     }
 
-    #[inline(always)]
-    pub fn free<T>(&self, my_box: &mut Box<T>) {
-        let index = size_of::<T>();
-        println!("box_free, index {}", index);
-        self.free_stacks[index].push(my_box.node);
-    }
+    // #[inline(always)]
+    // pub fn free<T>(&self, my_box: &mut Box<T>) {
+    //     let index = size_of::<T>();
+    //     println!("box_free, index {}", index);
+    //     self.free_stacks[index].push(my_box.node);
+    // }
 }
 
 #[cfg(test)]
@@ -101,6 +99,8 @@ mod test {
 
         drop(n_u8); // force drop
         drop(n_u32); // force drop
+
+        println!("alloc.free_stacks[1] {}", alloc.free_stacks[1]);
 
         let n_u8 = alloc.box_new(8u8);
         println!("n_u8 {}", *n_u8);

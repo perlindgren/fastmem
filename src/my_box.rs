@@ -1,6 +1,7 @@
-use crate::stack::Node;
-use crate::Alloc;
+use crate::stack::{Node, Stack};
+
 use core::mem::size_of;
+use core::mem::transmute;
 use core::ops::{Deref, DerefMut, Drop};
 
 #[derive(Debug)]
@@ -8,20 +9,14 @@ pub struct Box<T>
 where
     T: 'static,
 {
-    pub inner: &'static mut T,
-    pub allocator: &'static Alloc,
-    pub node: &'static mut Node,
+    pub node: &'static mut Node<T>,
 }
 
 impl<T> Box<T> {
-    pub fn new(t: &'static mut T, allocator: &'static Alloc, node: &'static mut Node) -> Self {
-        println!("New box, {}", size_of::<T>());
+    pub fn new(node: &'static mut Node<T>) -> Self {
+        println!("New box, size {}", size_of::<T>());
 
-        Self {
-            inner: t,
-            allocator,
-            node,
-        }
+        Self { node }
     }
 }
 
@@ -29,13 +24,13 @@ impl<T> Deref for Box<T> {
     type Target = T;
 
     fn deref(&self) -> &Self::Target {
-        &self.inner
+        &self.node.data
     }
 }
 
 impl<T> DerefMut for Box<T> {
     fn deref_mut(&mut self) -> &mut Self::Target {
-        &mut self.inner
+        &mut self.node.data
     }
 }
 
@@ -44,6 +39,7 @@ impl<T> Drop for Box<T> {
         println!("Dropping box");
         let size = size_of::<T>();
         println!("size {}", size);
-        self.allocator.free(self);
+        let stack: &Stack = unsafe { transmute(self.node.next) };
+        stack.push(self.node);
     }
 }
