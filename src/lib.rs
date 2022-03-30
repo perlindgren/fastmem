@@ -55,7 +55,7 @@ impl Alloc {
         match self.free_stacks[index].pop() {
             Some(node) => {
                 println!("found node, n_addr {:x}", node.data);
-                let data = unsafe { &mut *(&mut *(node.data as *mut T)) };
+                let data = unsafe { &mut *(node.data as *mut T) };
                 *data = t;
 
                 Box::new(data, self, node)
