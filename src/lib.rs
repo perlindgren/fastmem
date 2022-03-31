@@ -8,9 +8,9 @@ mod heap;
 mod my_box;
 mod stack;
 
-use heap::*;
-use my_box::*;
-use stack::*;
+pub use heap::*;
+pub use my_box::*;
+pub use stack::*;
 
 #[derive(Debug)]
 #[repr(C)]
@@ -30,6 +30,16 @@ impl AllocTmp {
     }
 
     pub fn init(&self) -> &Alloc {
+        let free_stacks = unsafe { &*self.free_stacks.as_ptr() };
+
+        for stack in free_stacks.iter() {
+            stack.head.set(None);
+        }
+
+        unsafe { transmute(self) }
+    }
+
+    pub fn init_heap(&self) -> &Alloc {
         let free_stacks = unsafe { &*self.free_stacks.as_ptr() };
 
         for stack in free_stacks.iter() {
@@ -64,10 +74,65 @@ impl Alloc {
     }
 }
 
+use core::cell::{Cell, UnsafeCell};
+pub struct H<const N: usize, const S: usize> {
+    heap: MaybeUninit<UnsafeCell<[u8; N]>>,
+    start: Cell<usize>,
+    end: Cell<usize>,
+    stacks: MaybeUninit<[Stack; S]>,
+}
+
+impl<const N: usize, const S: usize> H<N, S> {
+    const fn new() -> Self {
+        Self {
+            heap: MaybeUninit::uninit(),
+            start: Cell::new(0),
+            end: Cell::new(N),
+            stacks: MaybeUninit::uninit(),
+        }
+    }
+    fn init(&'static self) -> HI<N, S> {
+        let free_stacks = unsafe { &*self.stacks.as_ptr() };
+
+        for stack in free_stacks.iter() {
+            stack.head.set(None);
+        }
+
+        HI { h: self }
+    }
+}
+unsafe impl<const N: usize, const S: usize> Sync for H<N, S> {}
+
+pub struct HI<const N: usize, const S: usize> {
+    h: &'static H<N, S>,
+}
+
+impl<const N: usize, const S: usize> HI<N, S> {
+    fn start(&self) -> &Cell<usize> {
+        &self.h.start
+    }
+    fn end(&self) -> &Cell<usize> {
+        &self.h.end
+    }
+    fn stacks(&self) -> &[Stack; S] {
+        unsafe { self.h.stacks.assume_init_ref() }
+    }
+}
+
 #[cfg(test)]
 mod test {
     use super::*;
     use core::mem::drop;
+
+    #[test]
+    fn test_h() {
+        type He = H<128, 128>;
+        static H: He = H::new();
+        let h = H.init();
+        for s in h.stacks().iter() {
+            assert!(s.pop::<()>() == None);
+        }
+    }
 
     #[test]
     fn test_alloc() {

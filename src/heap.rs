@@ -7,7 +7,7 @@ pub struct RacyCell<T>(UnsafeCell<T>);
 
 impl<T> RacyCell<T> {
     #[inline(always)]
-    pub(crate) const fn new(value: T) -> Self {
+    pub const fn new(value: T) -> Self {
         RacyCell(UnsafeCell::new(value))
     }
     #[inline(always)]
