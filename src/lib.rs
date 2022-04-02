@@ -1,4 +1,4 @@
-// #![no_std]
+#![no_std]
 use core::fmt::Debug;
 
 use core::marker::PhantomData;
@@ -134,7 +134,7 @@ pub struct H<const N: usize, const S: usize> {
 impl<const N: usize, const S: usize> H<N, S> {
     // creates an uninitialized Heap<_, _, UnInit>
     // cannot be used unless initialized
-    const fn new() -> Self {
+    pub const fn new() -> Self {
         Self {
             heap: MaybeUninit::uninit(),
             start: Cell::new(0),
@@ -143,7 +143,7 @@ impl<const N: usize, const S: usize> H<N, S> {
         }
     }
 
-    fn init(&'static self) -> &He<N, S> {
+    pub fn init(&'static self) -> &He<N, S> {
         let free_stacks = unsafe { &*self.stacks.as_ptr() };
 
         for stack in free_stacks.iter() {
@@ -195,7 +195,7 @@ impl<const N: usize, const S: usize> He<N, S> {
             panic!("Out of memory (OOM)");
         }
 
-        println!("alloc: size {}, align {}, spill {}", size, align, spill);
+        // println!("alloc: size {}, align {}, spill {}", size, align, spill);
 
         let r: &mut T = unsafe { transmute::<_, &mut T>(start) };
         // let _alloc = core::mem::ManuallyDrop::new(alloc);
@@ -212,14 +212,14 @@ impl<const N: usize, const S: usize> He<N, S> {
         let stack = &self.stacks[index];
         let node: &mut Node<T> = match stack.pop() {
             Some(node) => {
-                if align_of::<T>() != align_of_val(node) {
+                if align_of::<T>() != align_of_val(&node.data) {
                     panic!("illegal alignment");
                 };
                 node
             }
             None => {
                 // new allocation
-                println!("new_allocation");
+                // println!("new_allocation");
                 self.alloc()
             }
         };
@@ -250,7 +250,7 @@ mod test {
         assert_eq!(h as *const _ as usize + 128, h.end.get());
 
         let n_u8 = h.box_new(8u8);
-        core::mem::forget(n_u8);
+        // core::mem::forget(n_u8);
     }
 
     #[test]
