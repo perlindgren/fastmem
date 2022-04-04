@@ -124,7 +124,29 @@
             "postLaunchCommands": [
                 "monitor arm semihosting enable"
             ],
-            "runToEntryPoint": "main",
+            // "runToEntryPoint": "main",
+            "executable": "./target/thumbv7em-none-eabihf/release/examples/${fileBasenameNoExtension}",
+            "cpu": "cortex-m4",
+        },
+        {
+            "type": "cortex-debug",
+            "request": "launch",
+            "name": "Cortex Release (No ITM) trace",
+            "servertype": "openocd",
+            "cwd": "${workspaceRoot}",
+            "preLaunchTask": "cargo build --example --release --features trace_semihost",
+            "svdFile": "${workspaceRoot}/.vscode/STM32F401.svd",
+            "configFiles": [
+                "interface/stlink.cfg",
+                "target/stm32f4x.cfg"
+            ],
+            "preRestartCommands": [
+                "load",
+            ],
+            "postLaunchCommands": [
+                "monitor arm semihosting enable"
+            ],
+            // "runToEntryPoint": "main",
             "executable": "./target/thumbv7em-none-eabihf/release/examples/${fileBasenameNoExtension}",
             "cpu": "cortex-m4",
         },

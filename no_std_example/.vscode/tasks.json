@@ -23,7 +23,23 @@
                 "build",
                 "--example",
                 "${fileBasenameNoExtension}",
-                "--release"
+                "--release",
+            ],
+            "problemMatcher": [
+                "$rustc"
+            ],
+            "group": "build",
+        },
+        {
+            "label": "cargo build --example --release --features trace_semihost",
+            "command": "cargo",
+            "args": [
+                "build",
+                "--example",
+                "${fileBasenameNoExtension}",
+                "--release",
+                "--features",
+                "trace_semihost",
             ],
             "problemMatcher": [
                 "$rustc"

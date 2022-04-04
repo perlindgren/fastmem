@@ -5,10 +5,14 @@ use core::ptr::NonNull;
 
 // Next field first, so we have a stable location
 //
+// Safety:
 // The `next` field is used as a raw pointer
 // to refer to the next Node on the stack.
 //
 // The `data' field holds the allocated data.
+//
+// The alignment of the data:T according to T.
+
 #[derive(Clone, Debug, PartialEq)]
 #[repr(C)]
 pub(crate) struct Node<T> {
@@ -64,7 +68,7 @@ impl Stack {
 #[cfg(test)]
 mod test {
     use super::*;
-    use core::mem::{size_of, size_of_val};
+    use core::mem::{align_of_val, size_of, size_of_val};
 
     #[test]
     fn test_size_list() {
@@ -112,6 +116,15 @@ mod test {
         // Will never be pushed back on stack
         // leaking!
         core::mem::forget(b1);
+    }
+
+    #[test]
+    fn test_alignment() {
+        #[repr(C, align(8))]
+        struct A8(u32);
+
+        let n = Node::new(A8(8));
+        assert_eq!(align_of_val(&n.data), 8);
     }
 }
 
