@@ -43,4 +43,12 @@ impl<T> Drop for Box<T> {
     }
 }
 
+#[cfg(not(feature = "trace_semihost"))]
+impl<T> Drop for Box<T> {
+    fn drop(&mut self) {
+        let stack: &Stack = unsafe { transmute(self.node.next) };
+        stack.push(self.node);
+    }
+}
+
 unsafe impl<T> Send for Box<T> {}

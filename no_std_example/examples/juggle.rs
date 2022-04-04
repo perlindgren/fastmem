@@ -6,13 +6,14 @@
 
 use panic_semihosting as _;
 
-#[rtic::app(device = stm32f4::stm32f411, dispatchers = [EXTI0])]
+#[rtic::app(device = stm32f4::stm32f411, /*  dispatchers = [EXTI0]) */)]
 mod app {
 
     use cortex_m::asm;
     use cortex_m::peripheral::DWT;
     use cortex_m_semihosting::hprintln;
     use fastmem::{Box, FastMem, FastMemStore};
+    use stm32f4::stm32f411::interrupt;
 
     #[shared]
     struct Shared {
@@ -30,53 +31,121 @@ mod app {
     ])]
     fn init(mut cx: init::Context) -> (Shared, Local, init::Monotonics) {
         hprintln!("init");
-        asm::bkpt();
+        
         let fm: &FastMem<128, 128> = cx.local.fm_store.init();
 
         cx.core.DWT.enable_cycle_counter();
         cx.core.DWT.set_cycle_count(0);
 
-        let start = DWT::cycle_count();
-        let b8 = fm.box_new(8u8);
-        let end = DWT::cycle_count();
-        hprintln!("Diff {:?}", end.wrapping_sub(start));
-        hprintln!("box b {}", *b8);
-
-        let start = DWT::cycle_count();
-        let b32 = fm.box_new(32u32);
-        let end = DWT::cycle_count();
-        hprintln!("Diff {:?}", end.wrapping_sub(start));
-
-        hprintln!("box b2 {}", *b32);
-
-        t2::spawn(b8);
-        t1::spawn();
         (Shared { fm }, Local {}, init::Monotonics())
     }
 
-    #[task(shared = [fm])]
-    fn t1(cx: t1::Context) {
-        hprintln!("t1");
+    #[idle]
+    fn idle(_cx: idle::Context) -> ! {
+        // measure first alloc, u8
+        rtic::pend(interrupt::EXTI1);
+        hprintln!("idle --");
+        // measure re-cycle
+        rtic::pend(interrupt::EXTI1);
+        hprintln!("idle --");
+
+        // measure first alloc, u32
+        rtic::pend(interrupt::EXTI2);
+        hprintln!("idle --");
+        // measure re-cycle
+        rtic::pend(interrupt::EXTI2);
+        hprintln!("idle --");
+
+        // measure first alloc, u64
+        rtic::pend(interrupt::EXTI3);
+        hprintln!("idle --");
+        // measure re-cycle
+        rtic::pend(interrupt::EXTI3);
+        hprintln!("idle --");
+
+        rtic::pend(interrupt::EXTI0);
+
+        loop {}
+    }
+
+
+   
+
+    #[task( 
+        binds = EXTI1,
+        shared = [fm],
+    )]
+    fn t1(cx: t1::Context,) {
         let start = DWT::cycle_count();
-        asm::bkpt();
-        let n_u8 = cx.shared.fm.box_new(1u8);
-        asm::bkpt();
+        let n = cx.shared.fm.box_new(1u8);
         let end = DWT::cycle_count();
-        hprintln!("t1 box {}", *n_u8);
-
-        hprintln!("t1 Diff {:?}", end.wrapping_sub(start));
-        t2::spawn(n_u8);
-    }
-
-    #[task(shared = [])]
-    fn t2(cx: t2::Context, b: Box<u8>) {
+        hprintln!("t1 box {}", *n);
+        hprintln!("t1 alloc {:?}", end.wrapping_sub(start));
         let start = DWT::cycle_count();
-        asm::bkpt();
-        hprintln!("t2 box {}", *b);
-        drop(b)
+        drop(n);
+        let end = DWT::cycle_count();
+        hprintln!("t1 drop {}", end.wrapping_sub(start));
     }
-    // #[inline(never)]
-    // pub fn alloc<T>(h: &'static FM, v: T) -> Box<T> {
-    //     h.box_new(v)
-    // }
+
+    #[task( 
+        binds = EXTI2,
+        shared = [fm], 
+    )]
+    fn t2(cx: t2::Context,) {
+        let start = DWT::cycle_count();
+        let n = cx.shared.fm.box_new(1u32);
+        let end = DWT::cycle_count();
+        hprintln!("t2 box {}", *n);
+        hprintln!("t2 alloc {:?}", end.wrapping_sub(start));
+        let start = DWT::cycle_count();
+        drop(n);
+        let end = DWT::cycle_count();
+        hprintln!("t2 drop {}", end.wrapping_sub(start));
+    }
+
+    #[task( 
+        binds = EXTI3,
+        shared = [fm], 
+    )]
+    fn t3(cx: t3::Context,) {
+        let start = DWT::cycle_count();
+        let n = cx.shared.fm.box_new(1u64);
+        let end = DWT::cycle_count();
+        hprintln!("t3 box {}", *n);
+        
+        hprintln!("t3 alloc {:?}", end.wrapping_sub(start));
+        let start = DWT::cycle_count();
+        drop(n);
+        let end = DWT::cycle_count();
+        hprintln!("t3 drop {}", end.wrapping_sub(start));
+    }
+
+    #[task( 
+        binds = EXTI0,
+        shared = [fm], 
+    )]
+    fn t0(cx: t0::Context,) {
+        let start = DWT::cycle_count();
+        let n = cx.shared.fm.box_new(1u64);
+        let end = DWT::cycle_count();
+        hprintln!("t0 box {}", *n);
+        hprintln!("t0 alloc {:?}", end.wrapping_sub(start));
+
+        let start = DWT::cycle_count();
+        let n1 = cx.shared.fm.box_new(1u64);
+        let end = DWT::cycle_count();
+        hprintln!("t0 box {}", *n);
+        hprintln!("t0 alloc {:?}", end.wrapping_sub(start));
+
+
+        let start = DWT::cycle_count();
+        drop(n);
+        let end = DWT::cycle_count();
+        hprintln!("t0 drop {}", end.wrapping_sub(start));
+
+        let start = DWT::cycle_count();
+        drop(n1);
+        let end = DWT::cycle_count();
+        hprintln!("t0 drop {}", end.wrapping_sub(start));
+    }
 }

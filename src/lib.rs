@@ -118,14 +118,18 @@ impl<const N: usize, const S: usize> FastMem<N, S> {
                 if cfg!(feature = "trace_semihost") {
                     hprintln!("box found @{:p}", node);
                 };
-                // if align_of::<T>() != align_of_val(&node.data) {
-                //     panic!("illegal alignment");
-                // };
+
+                // check alignment of data
+                if &node.data as *const _ as usize % align_of::<T>() != 0 {
+                    panic!("illegal alignment @{:p}", node);
+                };
+
                 node
             }
             None => {
                 // new allocation
                 let node = self.alloc();
+
                 if cfg!(feature = "trace_semihost") {
                     hprintln!("box alloc @{:p}", node);
                 };
