@@ -1,37 +1,132 @@
 # Fastmem
 
-An allocation library for embedded Rust back by static memory.
+An experimental allocator for embedded Rust.
 
-## Design
+Design goals, the allocator should: 
 
-By example:
+- provide fast and predictable allocations for sized types, 
+- work on stable rust, and 
+- be reasonably memory efficient.
+
+Goal fulfillment:
+
+- O(1) for uninitialized allocations. 
+- Initialization is Rust zero-cost, no extra OH added.
+- Works for all sized data types (including closures).
+- Reasonably memory efficient.
+
+---
+
+## Benchmark
+
+Benchmarks are compiled for ARM Cortex M4 (stm32f411), running at stock settings (16 MHz no flash memory wait states). The measurements include measuring overhead capturing the DWT cycle counter, (measuring overhead add approximately 5 clock cycles to the actual execution time). The measurements also include initialization of the correspond data type. The current implementation also verifies actual alignment at run-time. The allocator is simple and light weight by design. As seen below the difference between Debug/dev builds and release builds are marginal.
+
+| Debug/dev   | u8  | u32 | u64 |
+| ----------- | --- | --- | --- |
+| First alloc | 33  | 31  | 37  |
+| Re-alloc    | 20  | 21  | 24  |
+| Drop        | 9   | 9   | 9   |
+
+| Release     | u8  | u32 | u64 |
+| ----------- | --- | --- | --- |
+| First alloc | 31  | 31  | 34  |
+| Re-alloc    | 21  | 21  | 24  |
+| Drop        | 9   | 9   | 9   |
+
+## Usage
+
+The allocator relies on a static backing storage. 
+
+``` rust
+  FastMemStore<const N: usize, S: usize>
+```
+Where `N` is the size (in bytes), and `S` is the maximum size of an allocation. Using RTIC we can create an fastmem store as follows:
 
 ```rust
-#[test]
-fn test_alloc() {
-    pub static HEAP: Heap = Heap::new();
-    pub static HEAP_DATA: RacyCell<[u8; 128]> = RacyCell::new([0; 128]);
-    HEAP.init(&HEAP_DATA);
-    pub static ALLOC: AllocTmp = AllocTmp::new(&HEAP);
-    let alloc = ALLOC.init();
+ #[init(local = [fm_store: FastMemStore<1024, 128> = FastMemStore::new()])]
+```
 
-    let n_u8 = alloc.box_new(8u8);
-    println!("n_u8 {}", *n_u8);
+Here we have reserved 1024 bytes with a maximum allocation of 128 bytes. 
 
-    let n_u32 = alloc.box_new(32u32);
-    println!("n_u32 {}", *n_u32);
+A minimal usage example:
 
-    drop(n_u8); // force drop
-    drop(n_u32); // force drop
+```rust
+fn init(mut cx: init::Context) -> (Shared, Local, init::Monotonics) {
 
-    let n_u8 = alloc.box_new(8u8);
-    println!("n_u8 {}", *n_u8);
+    // create an initialized fastmem allocator from the store
+    let fm: &'static FastMem<1024, 128> = cx.local.fm_store.init();
 
-    let n_u32 = alloc.box_new(32u32);
-    println!("n_u32 {}", *n_u32);
+    // create a boxed value of type u8 (first allocation)
+    let b :Box<u8> = fm.box_new(1u8);
+    hprintln!("{:?}", b);
+    
+    drop(b); // explicit drop the box
+
+    // re-allocation of a dropped box
+    let b :Box<u8> = fm.box_new(1u8);
+    hprintln!("{:?}", b);
+
+    (Shared {}, Local {}, init::Monotonics())
 }
 ```
 
+The corresponding output:
+``` shell
+Box { node: Node { next: Some(0x2000040c), data: 1 } }
+Box { node: Node { next: Some(0x2000040c), data: 1 } }
+```
+
+The SRAM is located at `0x2000_0000`, we have allocated `1k` for the allocator data. The address `0x2000040c` is pointing to the re-allocation stack for the allocated box (more on that later).
+
+As seen the second allocation is re-using the dropped box.
+
+In a sequential context Rust+LLVM is able to see through local re-uses and further optimize the fastmem implementation (thus the benchmarking above is done in a concurrent setting, using separated tasks).
+
+The `Box<T>` de-references to a `&'static mut T`, thus we can store boxed allocations in RTIC resources (and messages) in a similar fashion as [heapless::pool](https://docs.rs/heapless/latest/heapless/pool/index.html). (Compared to `pool`, allocations may be of different types/sizes.)
+
+---
+
+## Design
+
+Internally the backing storage is implemented as:
+
+```rust
+/// Uninitialized representation of backing storage.
+///
+/// Type parameters:
+///
+/// const N:usize, the size of the storage in bytes.
+/// const S:usize, allocatable sizes [0..S] in bytes.              
+#[repr(C)]
+pub struct FastMemStore<const N: usize, const S: usize> {
+    heap: MaybeUninit<UnsafeCell<[u8; N]>>,
+    start: Cell<usize>,
+    end: Cell<usize>,
+    stacks: MaybeUninit<[Stack; S]>,
+}
+```
+
+Initialization returns a reference to an initialized overlay `FastMem` essentially a union of `FastMemStore`, but Rust does not allow unions over const generics (even if constants are provably preserved, transmute to our rescue).
+
+```rust
+/// Initialized representation of the backing storage.
+#[repr(C)]
+pub struct FastMem<const N: usize, const S: usize> {
+    heap: UnsafeCell<[u8; N]>,
+    start: Cell<usize>,
+    end: Cell<usize>,
+    stacks: [Stack; S],
+}
+```
+
+(Remark, the `heap` actually holds unitialized data but the `new_box` implementation ensures that allocated data is initialized before dereferenced.)
+
+---
+
+Todo ...
+
+
+<!-- 
 The `Heap` data structure holds two raw pointers to the beginning and end of the heap. These could possibly be tied to link script symbols, but for now we set them based on a static allocation of data, in `HEAP_DATA`.
 
 The actual allocator state is stored in `ALLOC` (referring to the backing store). `ALLOC.init()` returns an API to the initiated allocator, allowing to allocate boxed data.
@@ -106,7 +201,7 @@ As seen there is no true de-allocation, just re-cycling for sake of performance.
 
 ## Disclaimer: A two day hack
 
-The allocator was wrapped up as a prototype for evaluation, not yet properly tested (and not even `#[no_std]` due to tracing output currently).
+The allocator was wrapped up as a prototype for evaluation, not yet properly tested (and not even `#[no_std]` due to tracing output currently). -->
 
 
 

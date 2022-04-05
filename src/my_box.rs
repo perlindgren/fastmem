@@ -32,20 +32,11 @@ impl<T> DerefMut for Box<T> {
     }
 }
 
-#[cfg(feature = "trace_semihost")]
 impl<T> Drop for Box<T> {
     fn drop(&mut self) {
         if cfg!(feature = "trace_semihost") {
             hprintln!("drop (@box {:p}", self);
         }
-        let stack: &Stack = unsafe { transmute(self.node.next) };
-        stack.push(self.node);
-    }
-}
-
-#[cfg(not(feature = "trace_semihost"))]
-impl<T> Drop for Box<T> {
-    fn drop(&mut self) {
         let stack: &Stack = unsafe { transmute(self.node.next) };
         stack.push(self.node);
     }

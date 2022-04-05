@@ -9,10 +9,9 @@ use panic_semihosting as _;
 #[rtic::app(device = stm32f4::stm32f411, dispatchers = [EXTI0])]
 mod app {
 
-    // use core::mem::MaybeUninit;
     use cortex_m::peripheral::DWT;
     use cortex_m_semihosting::hprintln;
-    use fastmem::{FastMem, FastMemStore};
+    use fastmem::{Box, FastMem, FastMemStore};
 
     #[shared]
     struct Shared {}
@@ -21,17 +20,18 @@ mod app {
     struct Local {}
 
     #[init(local = [
-        fm_store: FastMemStore<128,128> = FastMemStore::new(),
+        fm_store: FastMemStore<1024,128> = FastMemStore::new(),
     ])]
     fn init(mut cx: init::Context) -> (Shared, Local, init::Monotonics) {
         hprintln!("init");
 
-        let fm: &FastMem<128, 128> = cx.local.fm_store.init();
+        let fm: &'static FastMem<1024, 128> = cx.local.fm_store.init();
         cx.core.DWT.enable_cycle_counter();
         cx.core.DWT.set_cycle_count(0);
 
+        let a = &[1, 2, 3];
         let start = DWT::cycle_count();
-        let n_u8 = fm.box_new(1u8);
+        let n_u8: Box<u8> = fm.box_new(1u8);
         let end = DWT::cycle_count();
 
         hprintln!("Diff {:?}", end.wrapping_sub(start));
@@ -42,7 +42,7 @@ mod app {
 
         hprintln!("Diff {:?}", end.wrapping_sub(start));
 
-        hprintln!("{}", *n_u8);
+        hprintln!("{:?}", n_u8);
         hprintln!("{}", *n_u32);
 
         hprintln!("n_u8 @{:p}", &*n_u8);
@@ -56,6 +56,8 @@ mod app {
         let start = DWT::cycle_count();
         let n_u8 = fm.box_new(1u8);
         let end = DWT::cycle_count();
+
+        hprintln!("{:?}", n_u8);
 
         hprintln!("Diff {:?}", end.wrapping_sub(start));
 
