@@ -42,4 +42,4 @@ impl<T> Drop for Box<T> {
     }
 }
 
-unsafe impl<T> Send for Box<T> {}
+unsafe impl<T> Send for Box<T> where T: Send {}

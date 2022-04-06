@@ -77,7 +77,7 @@ impl<const N: usize, const S: usize> FastMem<N, S> {
     // Todo:
     // Drop semantics defined here or elsewhere
     #[inline(always)]
-    fn alloc<T>(&'static self) -> &mut T {
+    fn alloc<T>(&'static self) -> Option<&mut T> {
         let mut start = self.start.get();
 
         let size = size_of::<T>();
@@ -88,25 +88,34 @@ impl<const N: usize, const S: usize> FastMem<N, S> {
             start += align - spill;
         }
 
-        let new_start = start + size;
-        if new_start > self.end.get() {
-            panic!("Out of memory (OOM)");
-        }
-
         if cfg!(feature = "trace_semihost") {
             hprintln!("alloc: size {}, align {}, spill {}", size, align, spill);
         }
 
-        let r: &mut T = unsafe { transmute::<_, &mut T>(start) };
-        // let _alloc = core::mem::ManuallyDrop::new(alloc);
-
-        self.start.set(new_start);
-        r
+        let new_start = start + size;
+        if new_start > self.end.get() {
+            None
+        } else {
+            let r: &mut T = unsafe { transmute::<_, &mut T>(start) };
+            self.start.set(new_start);
+            Some(r)
+        }
     }
 
-    // Allocate a Box like deference to data of size T
+    /// Allocate a Box like deference to data of size T
+    /// Panics on OOM
     #[inline(always)]
-    pub fn box_new<T>(&'static self, t: T) -> Box<T> {
+    pub fn new<T>(&'static self, t: T) -> Box<T> {
+        match self.try_new(t) {
+            None => panic!("Out of memory"),
+            Some(b) => b,
+        }
+    }
+
+    /// Allocate a Box like deference to data of size T
+    /// None on OOM, else Some<Box<T>>
+    #[inline(always)]
+    pub fn try_new<T>(&'static self, t: T) -> Option<Box<T>> {
         let index = size_of::<T>();
 
         let stack = &self.stacks[index];
@@ -128,7 +137,7 @@ impl<const N: usize, const S: usize> FastMem<N, S> {
             }
             None => {
                 // new allocation
-                let node = self.alloc();
+                let node = self.alloc()?;
 
                 if cfg!(feature = "trace_semihost") {
                     hprintln!("box alloc @{:p}", node);
@@ -139,7 +148,7 @@ impl<const N: usize, const S: usize> FastMem<N, S> {
         node.data = t;
         node.next = unsafe { transmute(stack) };
 
-        Box::new(node)
+        Some(Box::new(node))
     }
 }
 
@@ -163,7 +172,7 @@ mod test_lib {
         assert_eq!(fm as *const _ as usize, fm.start.get());
         assert_eq!(fm as *const _ as usize + 128, fm.end.get());
 
-        let n_u8 = fm.box_new(8u8);
+        let n_u8 = fm.new(8u8);
         assert_eq!(*n_u8, 8);
     }
 
@@ -172,7 +181,7 @@ mod test_lib {
         static FM_STORE: FastMemStore<128, 128> = FastMemStore::new();
         let fm: &'static _ = FM_STORE.init();
 
-        let n_closure = fm.box_new(|x: i32| x + 1);
+        let n_closure = fm.new(|x: i32| x + 1);
 
         assert_eq!(n_closure(1), 2);
         let s = size_of_val(&n_closure.node.data);
@@ -198,35 +207,35 @@ mod test_lib {
         // 0010 E E E E
 
         // A u8
-        let p1: &mut u8 = fm.alloc();
+        let p1: &mut u8 = fm.alloc().unwrap();
         *p1 = 1;
         assert_eq!(*p1, 1);
         assert_eq!(p1 as *const _ as usize, start);
 
         // B [u2; 1]
         // start with offset 1, no padding, byte array byte aligned
-        let p2: &mut [u8; 2] = fm.alloc();
+        let p2: &mut [u8; 2] = fm.alloc().unwrap();
         p2[..].copy_from_slice(&[0, 1]);
         assert_eq!(&p2[..], &[0, 1]);
         assert_eq!(p2 as *const _ as usize, start + 1);
 
         // C u32
         // check padding, with 1
-        let p3: &mut u32 = fm.alloc();
+        let p3: &mut u32 = fm.alloc().unwrap();
         *p3 = 0x1234_5678u32;
         assert_eq!(*p3, 0x1234_5678u32);
         assert_eq!(p3 as *const _ as usize, start + 4);
 
         // D [u16; 3]
         // start with offset 1, no padding, byte array byte aligned
-        let p4: &mut [u16; 3] = fm.alloc();
+        let p4: &mut [u16; 3] = fm.alloc().unwrap();
         p4[..].copy_from_slice(&[0, 1, 2]);
         assert_eq!(&p4[..], &[0, 1, 2]);
         assert_eq!(p4 as *const _ as usize, start + 8);
 
         // E u32
         // start with offset 1, no padding, byte array byte aligned
-        let p5: &mut u32 = fm.alloc();
+        let p5: &mut u32 = fm.alloc().unwrap();
         *p5 = 0x1234_5678u32;
         assert_eq!(*p5, 0x1234_5678u32);
         assert_eq!(p5 as *const _ as usize, start + 0x10);
@@ -276,7 +285,7 @@ mod test_lib {
         static FM_STORE: FastMemStore<128, 128> = FastMemStore::new();
         let fm: &'static _ = FM_STORE.init();
 
-        let a4 = fm.box_new([0u8, 1, 2, 4]);
+        let a4 = fm.new([0u8, 1, 2, 4]);
 
         assert_eq!(align_of_val(&a4[0]), 1);
         // assert_eq!(size_of_val(&a8.node.data), 4);

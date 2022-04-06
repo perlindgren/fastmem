@@ -1,6 +1,5 @@
 #![deny(unsafe_code)]
-// #![deny(warnings)]
-// #![allow(no_mangle)]
+#![deny(warnings)]
 #![no_main]
 #![no_std]
 
@@ -9,7 +8,6 @@ use panic_semihosting as _;
 #[rtic::app(device = stm32f4::stm32f411, /*  dispatchers = [EXTI0]) */)]
 mod app {
 
-    use cortex_m::asm;
     use cortex_m::peripheral::DWT;
     use cortex_m_semihosting::hprintln;
     use fastmem::{FastMem, FastMemStore};
@@ -68,16 +66,13 @@ mod app {
         loop {}
     }
 
-
-   
-
     #[task( 
         binds = EXTI1,
         shared = [fm],
     )]
     fn t1(cx: t1::Context,) {
         let start = DWT::cycle_count();
-        let n = cx.shared.fm.box_new(1u8);
+        let n = cx.shared.fm.new(1u8);
         let end = DWT::cycle_count();
         hprintln!("t1 box {}", *n);
         hprintln!("t1 alloc {:?}", end.wrapping_sub(start));
@@ -93,7 +88,7 @@ mod app {
     )]
     fn t2(cx: t2::Context,) {
         let start = DWT::cycle_count();
-        let n = cx.shared.fm.box_new(1u32);
+        let n = cx.shared.fm.new(1u32);
         let end = DWT::cycle_count();
         hprintln!("t2 box {}", *n);
         hprintln!("t2 alloc {:?}", end.wrapping_sub(start));
@@ -109,7 +104,7 @@ mod app {
     )]
     fn t3(cx: t3::Context,) {
         let start = DWT::cycle_count();
-        let n = cx.shared.fm.box_new(1u64);
+        let n = cx.shared.fm.new(1u64);
         let end = DWT::cycle_count();
         hprintln!("t3 box {}", *n);
         
@@ -126,13 +121,13 @@ mod app {
     )]
     fn t0(cx: t0::Context,) {
         let start = DWT::cycle_count();
-        let n = cx.shared.fm.box_new(1u64);
+        let n = cx.shared.fm.new(1u64);
         let end = DWT::cycle_count();
         hprintln!("t0 box {}", *n);
         hprintln!("t0 alloc {:?}", end.wrapping_sub(start));
 
         let start = DWT::cycle_count();
-        let n1 = cx.shared.fm.box_new(1u64);
+        let n1 = cx.shared.fm.new(1u64);
         let end = DWT::cycle_count();
         hprintln!("t0 box {}", *n);
         hprintln!("t0 alloc {:?}", end.wrapping_sub(start));

@@ -60,13 +60,13 @@ fn init(mut cx: init::Context) -> (Shared, Local, init::Monotonics) {
     let fm: &'static FastMem<1024, 128> = cx.local.fm_store.init();
 
     // create a boxed value of type u8 (first allocation)
-    let b :Box<u8> = fm.box_new(1u8);
+    let b :Box<u8> = fm.new(1u8);
     hprintln!("{:?}", b);
     
     drop(b); // explicit drop the box
 
     // re-allocation of a dropped box
-    let b :Box<u8> = fm.box_new(1u8);
+    let b :Box<u8> = fm.new(1u8);
     hprintln!("{:?}", b);
 
     (Shared {}, Local {}, init::Monotonics())
@@ -79,7 +79,7 @@ Box { node: Node { next: Some(0x2000040c), data: 1 } }
 Box { node: Node { next: Some(0x2000040c), data: 1 } }
 ```
 
-The SRAM is located at `0x2000_0000`, we have allocated `1k` for the allocator data. The address `0x2000040c` is pointing to the re-allocation stack for the allocated box (more on that later).
+The SRAM is located at `0x2000_0000`, we have allocated 1kB for the data storage. The address `0x2000040c` is pointing to the internal re-allocation stack for the allocated box (more on that later).
 
 As seen the second allocation is re-using the dropped box.
 
@@ -109,7 +109,7 @@ pub struct FastMemStore<const N: usize, const S: usize> {
 }
 ```
 
-Initialization returns a reference to an initialized overlay `FastMem` essentially a union of `FastMemStore`, but Rust does not allow unions over const generics (even if constants are provably preserved, transmute to our rescue).
+Initialization returns a reference to an initialized overlay `FastMem` essentially a union of `FastMemStore`, but Rust (currently) rejects unions over const generics even if invariant/preserved.
 
 ```rust
 /// Initialized representation of the backing storage.
@@ -122,51 +122,74 @@ pub struct FastMem<const N: usize, const S: usize> {
 }
 ```
 
-(Remark, the `heap` actually holds uninitialized data but the `new_box` implementation ensures that allocated data is initialized before dereferenced.)
+The `heap` actually holds uninitialized data but the public API (`new` box implementation) ensures that allocated data is initialized before dereferenced. So for convenience of the implementation, the `MaybeUninit` is assumed initiated.
 
----
+The `FastMem` data structure holds `start` and `end` of the `heap` (data storage). (Their initial values could could possibly be tied to link script symbols to automatically allocate the memory region.) 
 
-Todo ...
+A raw allocation is implemented as:
 
+``` rust
+fn alloc<T>(&'static self) -> Option<&mut T> {
+    let mut start = self.start.get();
 
-<!-- 
-The `Heap` data structure holds two raw pointers to the beginning and end of the heap. These could possibly be tied to link script symbols, but for now we set them based on a static allocation of data, in `HEAP_DATA`.
+    let size = size_of::<T>();
+    let align = align_of::<T>();
+    let spill = start % align;
 
-The actual allocator state is stored in `ALLOC` (referring to the backing store). `ALLOC.init()` returns an API to the initiated allocator, allowing to allocate boxed data.
+    if spill != 0 {
+        start += align - spill;
+    }
 
-On `drop` the associated allocation is recycled, into a set of pre-allocated stacks. For the example the set is 128, but this could be generalized (by a const generic).
+    let new_start = start + size;
+    if new_start > self.end.get() {
+        None
+    } else {
+        let r: &mut T = unsafe { transmute::<_, &mut T>(start) };
+        self.start.set(new_start);
+        Some(r)
+    }
+}
+```
+
+We ensure that the allocated data is aligned by padding (`spill`). We transmuted the allocated space to a mutable reference `&mut T`. In general this is unsound but the reference is always initialized before dereferenced as shown below.
+
+The user facing API provides both a `try_new(&'static,t:T) -> Option<Box<t>>` and the `new(&'static,t:T) -> Box<T>` which panics on an out of memory condition.  
+
+The implementation:
+``` rust
+pub fn try_new<T>(&'static self, t: T) -> Option<Box<T>> {
+    let index = size_of::<T>();
+    let stack = &self.stacks[index];
+
+    let node: &mut Node<T> = match stack.pop() {
+        Some(node) => {
+            // check alignment of data
+            if &node.data as *const _ as usize % align_of::<T>() != 0 {
+                panic!("illegal alignment @{:p}", node);
+            };
+
+            node
+        }
+        None => {
+            self.alloc()?
+        }
+    };
+    node.data = t; 
+    node.next = unsafe { transmute(stack) };
+
+    Some(Box::new(node))
+}
+```
+
+The `index` is determined from the size of `T` and used to `pop` the corresponding recycling stack. If a `node` is found we check its alignment (as an extra step of precaution). If the recycling stack is empty we create a new allocation.
+
+After `data` initialization the `next` field is set to point to the head of the recycling stack. We type is erased by the transmute (the type of the data is irrelevant for the recycling, only the size is of interest).
+
+Later when the returned box is dropped, the `node` is pushed to the recycling stack. All of these operations beside the actual data initialization is constant time.  
 
 What makes `fastmem` fast is that data is never really de-allocated but rather re-cycled.
 
-Taken from the implementation:
 
-``` rust
-    ...
-    pub fn box_new<T>(&'static self, t: T) -> Box<T> {
-        let index = size_of::<T>();
-        println!("box_new, index {}", index);
-
-        match self.free_stacks[index].pop() {
-            Some(node) => {
-                println!("found node, n_addr {:x}", node.data);
-                let data = unsafe { &mut *(&mut *(node.data as *mut T)) };
-                *data = t;
-
-                Box::new(data, self, node)
-            }
-            None => {
-                println!("new allocation");
-                let n = self.heap.alloc(t);
-                let n_addr = n as *const T as usize;
-                println!("n_addr {:x}", n_addr);
-                let n_node = self.heap.alloc(Node::new(n_addr));
-
-                Box::new(n, self, n_node)
-            }
-        }
-    }
-    ...
-```
 `index` is computed based on the size of `T` (the size of the data we want to allocate). We select the appropriate stack by indexing the array `self.free_stacks`, and `pop`.
 
 If `Some(node)` was found, we re-use the corresponding store (`node.data`) and return a new `Box`, else (if no free memory of size `T` is found), we allocate both the store `n` and a `Node` for book-keeping. 

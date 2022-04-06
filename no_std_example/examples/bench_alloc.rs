@@ -31,13 +31,13 @@ mod app {
 
         let a = &[1, 2, 3];
         let start = DWT::cycle_count();
-        let n_u8: Box<u8> = fm.box_new(1u8);
+        let n_u8: Box<u8> = fm.new(1u8);
         let end = DWT::cycle_count();
 
         hprintln!("Diff {:?}", end.wrapping_sub(start));
 
         let start = DWT::cycle_count();
-        let n_u32 = fm.box_new(32u32);
+        let n_u32 = fm.new(32u32);
         let end = DWT::cycle_count();
 
         hprintln!("Diff {:?}", end.wrapping_sub(start));
@@ -54,7 +54,7 @@ mod app {
         hprintln!("after dropping, re-cycled alloc");
 
         let start = DWT::cycle_count();
-        let n_u8 = fm.box_new(1u8);
+        let n_u8 = fm.new(1u8);
         let end = DWT::cycle_count();
 
         hprintln!("{:?}", n_u8);
@@ -62,7 +62,7 @@ mod app {
         hprintln!("Diff {:?}", end.wrapping_sub(start));
 
         let start = DWT::cycle_count();
-        let n_u32 = fm.box_new(32u32);
+        let n_u32 = fm.new(32u32);
         let end = DWT::cycle_count();
 
         hprintln!("Diff {:?}", end.wrapping_sub(start));
