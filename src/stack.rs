@@ -21,7 +21,8 @@ pub(crate) struct Node<T> {
 }
 
 impl<T> Node<T> {
-    const fn new(data: T) -> Self {
+    #[allow(unused)]
+    pub(crate) const fn new(data: T) -> Self {
         Node { next: None, data }
     }
 }
@@ -32,6 +33,7 @@ pub struct Stack {
 }
 
 impl Stack {
+    #[allow(unused)]
     pub(crate) const fn new() -> Self {
         Stack {
             head: Cell::new(None),
@@ -95,10 +97,10 @@ mod test {
         stack.push(&mut n2);
         // println!("{}", stack);
 
-        let new_n2: &mut Node<[i32; 4]> = stack.pop().unwrap();
+        let _new_n2: &mut Node<[i32; 4]> = stack.pop().unwrap();
         // println!("new_n2 {:?}", new_n2);
 
-        let new_n1: &mut Node<i32> = stack.pop().unwrap();
+        let _new_n1: &mut Node<i32> = stack.pop().unwrap();
         // println!("new_n1 {:?}", new_n1);
 
         assert_eq!(stack.head.get(), None);

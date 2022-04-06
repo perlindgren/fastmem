@@ -2,7 +2,7 @@
 
 use core::{
     cell::{Cell, UnsafeCell},
-    mem::{align_of, align_of_val, size_of, transmute, MaybeUninit},
+    mem::{align_of, size_of, transmute, MaybeUninit},
 };
 use cortex_m_semihosting::hprintln;
 
@@ -156,7 +156,7 @@ impl<const N: usize, const S: usize> FastMem<N, S> {
 mod test_lib {
     use super::*;
     use core::mem::drop;
-    use core::mem::size_of_val;
+    use core::mem::{align_of_val, size_of_val};
 
     #[test]
     fn test_h() {

@@ -239,8 +239,9 @@ An RTIC application executes in two phases, the `init` task used to do static co
 Whereas the implementation is straightforward and the use of unsafe code is limited to a small set of transmute operations, ensuring soundness is still non-trivial. The current implementation is to be considered experimental, and further work is needed regarding:
 
 - Drop semantics (are we correctly handling all possible cases, e.g., leaking memory, zero-sized types etc.).
-- Alignment (for now we take a defensive approach applying urn-time verification of actual alignment).
+- Alignment (for now we take a defensive approach applying run-time verification of actual alignment).
 - Sync/Send type bounds (are we following Rust semantics for all cases).
+- Likely more...
 
 ---
 
