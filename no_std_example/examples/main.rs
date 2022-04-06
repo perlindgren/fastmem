@@ -30,7 +30,7 @@ mod app {
         drop(b); // explicit drop the box
 
         // re-allocation of a dropped box
-        let b: Box<u8> = fm.new(1u8);
+        let b: Box<u8> = fm.new(2u8);
         hprintln!("{:?}", b);
 
         (Shared {}, Local {}, init::Monotonics())

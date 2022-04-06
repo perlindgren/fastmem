@@ -1,6 +1,5 @@
 #![deny(unsafe_code)]
-// #![deny(warnings)]
-// #![allow(no_mangle)]
+#![deny(warnings)]
 #![no_main]
 #![no_std]
 
@@ -29,7 +28,6 @@ mod app {
         cx.core.DWT.enable_cycle_counter();
         cx.core.DWT.set_cycle_count(0);
 
-        let a = &[1, 2, 3];
         let start = DWT::cycle_count();
         let n_u8: Box<u8> = fm.new(1u8);
         let end = DWT::cycle_count();
