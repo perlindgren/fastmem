@@ -181,53 +181,73 @@ pub fn try_new<T>(&'static self, t: T) -> Option<Box<T>> {
 }
 ```
 
-The `index` is determined from the size of `T` and used to `pop` the corresponding recycling stack. If a `node` is found we check its alignment (as an extra step of precaution). If the recycling stack is empty we create a new allocation.
+The `index` is determined from the size of `T` and used to `pop` the corresponding recycling stack (`self.stack[index]`). If a `node` is found we check its alignment (as an extra step of precaution). If the recycling stack is empty we create a new allocation.
 
-After `data` initialization the `next` field is set to point to the head of the recycling stack. We type is erased by the transmute (the type of the data is irrelevant for the recycling, only the size is of interest).
+The `node.data = t` is initialized and the `next` field is set to point to the head of the recycling stack. The type is erased by the transmute (the type of the data is irrelevant for the recycling, only the size is of interest).
 
-Later when the returned box is dropped, the `node` is pushed to the recycling stack. All of these operations beside the actual data initialization is constant time.  
+Later when the returned box is dropped, the `node` is `push`ed to the recycling stack (pointed to by the `next` field). Also here we erase the type using transmute.
 
-What makes `fastmem` fast is that data is never really de-allocated but rather re-cycled.
-
-
-`index` is computed based on the size of `T` (the size of the data we want to allocate). We select the appropriate stack by indexing the array `self.free_stacks`, and `pop`.
-
-If `Some(node)` was found, we re-use the corresponding store (`node.data`) and return a new `Box`, else (if no free memory of size `T` is found), we allocate both the store `n` and a `Node` for book-keeping. 
-
-The "hot path" (re-cycling) is kept to a minimal, and thus should be very fast (my goal is 20 cycles, but not yet measured, so we will see). The cold path is also fairly efficient amounting to two allocations (for `data` and `Node` with possible padding). Here I assume something like 40 cycles.
-
-## Further improvements
-
-One could pre-allocate a set of `Nodes` into a separate data structure which would make "cold path" faster. However, this would require enforcing a hard limit to the number of allocations. 
-
-For now indexing is solely based on the size, e.g. a `T` of size 13 would look at `free_stacks[13]`. From a CPU performance perspective this is likely the fastest we can do. The downside is that we waste some memory for `Stack`s with unlikely sizes, (13 is not the most common size, right). So we could round up the size to next power of 2, and then make a log2 of the rounded size. Each `Stack` is represented by a `head` node () 
-
-```rust
-#[derive(Clone, Debug, PartialEq)]
-pub struct Stack {
-    pub head: Cell<Option<NonNull<Node>>>,
+``` rust
+impl<T> Drop for Box<T> {
+    fn drop(&mut self) {
+        let stack: &Stack = unsafe { transmute(self.node.next) };
+        stack.push(self.node);
+    }
 }
 ```
+---
 
-`Cell<Option<NonNull<Node>>>` is fairly storage efficient. `Cell` is transparent, and so is `Option` for a `NonNull` pointer. The `Node` is also small:
+## CPU Performance
 
-```rust
-pub struct Node {
-    pub data: usize,
-    next: Option<NonNull<Node>>,
-}
-```
-Each `Node` holds a pointer to the `data` (32 bits) and a `next` field (another 32 bits). (Observation: We could use a `NonNull` pointer for the `data`, might be cleaner). In any case on a 32-bit system the cost is 8 bytes. So the memory overhead is only 8 bytes for each allocation + 4 times the number of "slots" (determined by the max size of allocatable elements.)
+What makes `fastmem` fast is that data is never really de-allocated but rather re-cycled. All operations are constant time besides:
 
-As mentioned the allocator could be const generic to the max-size (`free_stacks: [const N; ...])`. We could check with a `const_assert` that allocations are in range and use unchecked lookup. Rust will (eventually) prove the `const_assert` at compile time, and allow some run-time code for checked array lookup to be optimized out.
+- FastMemStore `init`, which is linear to `S` (the maximum allocation size). This is done once.
+- FastMem `new`/`try_new`, where the `node.data = t` (value assigned by move) cost is determined by `T`.
 
-## Limitations and intended "semi static" use
+On first allocation, data is allocated from the `heap` (approximately 25 cycles), an re-allocation (the common case) we merely `pop` an existing stack (< 20 cycles).
 
-As seen there is no true de-allocation, just re-cycling for sake of performance. For highly dynamic workloads this will be wasteful of resources (memory) but the intention is to use `fastmem` for hard real-time systems, which are typically less dynamic regarding allocation requirements. A typical use case is to store messages (closures) or async futures. While these are dynamic in size (unsized at compile time), there will be limited set of recurring fix sized messages and futures in the system. For a fixed set of futures (async tasks, these can be dynamically allocated at startup).
+---
 
-## Disclaimer: A two day hack
+## Memory Performance
 
-The allocator was wrapped up as a prototype for evaluation, not yet properly tested (and not even `#[no_std]` due to tracing output currently). -->
+The static store contains the data (`heap:[u8;N]`), `start/end` (both `usize`), and an array of `stacks : [Stack;S]` (where each `Stack` is `usize`). Each allocated `node` has a an overhead of `usize`. (`usize` has size and alignment of 4 for the Cortex-M 32 bit architecture.) 
+
+Rust ensures that alignments are even powers of 2 (1, 2, 4, ... etc). The implementation by `stack: [Stack;S]`, trades memory for performance (e.g. `index == 5` will never be used, but on the other hand lookup is constant time.) Assuming `S == 128` we have only 7 valid/distinct sizes (1, 2, 4, 8, 16, 32, 64), while we are using 128*4 = 512 bytes of memory. 
+
+--
+
+## Further performance improvements
+
+The CPU performance is strikingly good, perhaps even *zero-cost* in Rust terms. However we are not quite there yet. E.g., the `index` lookup is range checked. Hopefully Rust type system will in the future allow the size of `T` to be checked against `S` at compile time (`where size_of::<T> < S` or similar). Alternatively, we could adopt unchecked array indexing (and apply bounds checking at compile time, e.g. by symbolic execution).
+
+We could also mitigate the memory overhead by relying on the Rust alignment guarantees (even powers of 2), and just count trailing zeros. This can be done in assembly by the `CNZ` instruction. In this way `stacks: [Stacks; S]` would imply size of the maximum allocatable block would be 2 to the power of `S`, and we would waste memory only in cases some block size is never used by the application. However, as as a first proof of concept we accept the memory overhead.
+
+### Considerations
+
+The efficiency (both memory and CPU) relies on the recycling of fixed sized blocks. Blocks will never be collected/merged. This may give rise to fragmentation issues (we can run out of memory, while at the same time having free blocks available in other recycling stacks).
+
+While there are numerous possible ways to implement de-fragmentation, the goal with `fastmem` is to provide a simple, light weight and fast allocator with constant time guarantees suitable to statically analyzable hard real-time systems. 
+
+In practice such systems are typically well behaved (with repetitive allocation patterns). E.g., buffers for DMA operations are circulated between the driver (allocating the buffer), to the user task(s) consuming the data, and/or the other way around. The number of outstanding buffers is typically small with a bounded maximum in accordance to governing real-time constraints. Other examples include communication where we address recurring packages with a limited set of unique package sizes. 
+
+An RTIC application executes in two phases, the `init` task used to do static configuration and the `run` phase where tasks are dynamically executed. In case the allocation patterns during `init` and `run` differs, we might have `stacks` of free memory that will never be used after `init`. This problem might be solved by  applying de-fragmentation between the `init` and `run` phase. Even box relocation should be fine as long as data has is not pinned (`Pin<T>`), but that has to be investigated further.
+
+---
+
+## Soundness
+
+Whereas the implementation is straightforward and the use of unsafe code is limited to a small set of transmute operations, ensuring soundness is still non-trivial. The current implementation is to be considered experimental, and further work is needed regarding:
+
+- Drop semantics (are we correctly handling all possible cases, e.g., leaking memory, zero-sized types etc.).
+- Alignment (for now we take a defensive approach applying urn-time verification of actual alignment).
+- Sync/Send type bounds (are we following Rust semantics for all cases).
+
+---
+
+## License and Contributions
+
+License has not yet been determined. Most likely it will follow the dual MIT/Apache licensing scheme.
+
 
 
 
