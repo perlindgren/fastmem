@@ -21,17 +21,20 @@ Goal fulfillment:
 
 Benchmarks are compiled for ARM Cortex M4 (stm32f411), running at stock settings (16 MHz no flash memory wait states). The measurements include measuring overhead capturing the DWT cycle counter, (measuring overhead add approximately 5 clock cycles to the actual execution time). The measurements also include initialization of the correspond data type. The current implementation also verifies actual alignment at run-time. The allocator is simple and light weight by design. As seen below the difference between Debug/dev builds and release builds are marginal.
 
-| Debug/dev   | u8  | u32 | u64 |
-| ----------- | --- | --- | --- |
-| First alloc | 33  | 31  | 37  |
-| Re-alloc    | 20  | 21  | 24  |
-| Drop        | 9   | 9   | 9   |
+| Debug/dev         | u8  | u32 | u64 |
+| -----------       | --- | --- | --- |
+| First allocation  | 33  | 31  | 37  |
+| Re-allocation     | 20  | 21  | 24  |
+| Drop              | 9   | 9   | 9   |
+      
+| Release           | u8  | u32 | u64 |
+| -----------       | --- | --- | --- |
+| First allocation  | 31  | 31  | 34  |
+| Re-allocation     | 21  | 21  | 24  |
+| Drop              | 9   | 9   | 9   |
+   
 
-| Release     | u8  | u32 | u64 |
-| ----------- | --- | --- | --- |
-| First alloc | 31  | 31  | 34  |
-| Re-alloc    | 21  | 21  | 24  |
-| Drop        | 9   | 9   | 9   |
+---
 
 ## Usage
 
@@ -119,7 +122,7 @@ pub struct FastMem<const N: usize, const S: usize> {
 }
 ```
 
-(Remark, the `heap` actually holds unitialized data but the `new_box` implementation ensures that allocated data is initialized before dereferenced.)
+(Remark, the `heap` actually holds uninitialized data but the `new_box` implementation ensures that allocated data is initialized before dereferenced.)
 
 ---
 
