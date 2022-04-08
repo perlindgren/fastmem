@@ -9,7 +9,8 @@ pub struct Box<T>
 where
     T: 'static,
 {
-    pub(crate) node: &'static mut Node<T>,
+    // pub(crate) node: &'static mut Node<T>,
+    pub node: &'static mut Node<T>,
 }
 
 impl<T> Box<T> {

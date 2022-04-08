@@ -15,9 +15,14 @@ use core::ptr::NonNull;
 
 #[derive(Clone, Debug, PartialEq)]
 #[repr(C)]
-pub(crate) struct Node<T> {
-    pub(crate) next: Option<NonNull<usize>>,
-    pub(crate) data: T,
+// pub(crate) struct Node<T> {
+//     pub(crate) next: Option<NonNull<usize>>,
+//     pub(crate) data: T,
+// }
+
+pub struct Node<T> {
+    pub next: Option<NonNull<usize>>,
+    pub data: T,
 }
 
 impl<T> Node<T> {
