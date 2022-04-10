@@ -26,10 +26,10 @@ impl<T> Node<T> {
         }
     }
 
-    #[inline(always)]
-    unsafe fn erase_mut(&mut self) -> &mut Node<Erased> {
-        transmute(self)
-    }
+    // #[inline(always)]
+    // unsafe fn erase_mut(&mut self) -> &mut Node<Erased> {
+    //     transmute(self)
+    // }
 
     #[inline(always)]
     unsafe fn erase(&self) -> &Node<Erased> {
@@ -37,21 +37,21 @@ impl<T> Node<T> {
     }
 
     #[inline(always)]
-    pub(crate) fn as_mut_ref(&self) -> &mut T {
+    pub(crate) fn ptr_as_mut_ref(&self) -> &mut T {
         unsafe { transmute(self.ptr) }
     }
 
     #[inline(always)]
-    pub(crate) fn as_ref(&self) -> &T {
+    pub(crate) fn ptr_as_ref(&self) -> &T {
         unsafe { transmute(self.ptr) }
     }
 }
 
 impl Node<Erased> {
-    #[inline(always)]
-    unsafe fn restore_mut<T>(&mut self) -> &Node<T> {
-        transmute(self)
-    }
+    // #[inline(always)]
+    // unsafe fn restore_mut<T>(&mut self) -> &Node<T> {
+    //     transmute(self)
+    // }
 
     #[inline(always)]
     unsafe fn restore<T>(&self) -> &Node<T> {

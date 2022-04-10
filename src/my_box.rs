@@ -22,13 +22,13 @@ impl<T> Deref for Box<T> {
     type Target = T;
 
     fn deref(&self) -> &Self::Target {
-        self.node.as_ref()
+        self.node.ptr_as_ref()
     }
 }
 
 impl<T> DerefMut for Box<T> {
     fn deref_mut(&mut self) -> &mut Self::Target {
-        self.node.as_mut_ref()
+        self.node.ptr_as_mut_ref()
     }
 }
 
@@ -37,6 +37,10 @@ impl<T> Drop for Box<T> {
         if cfg!(feature = "trace_semihost") {
             hprintln!("drop (@box {:p}", self);
         }
+        println!("drop @box {:p}", self);
+        println!("drop node {}", self.node);
+        println!("drop next {:p}", self.node.next.as_ptr());
+
         let stack: &Stack = unsafe { transmute(self.node.next.get()) };
 
         stack.push(self.node);
