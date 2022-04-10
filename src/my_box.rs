@@ -9,12 +9,11 @@ pub struct Box<T>
 where
     T: 'static,
 {
-    // pub(crate) node: &'static mut Node<T>,
-    pub node: &'static mut Node<T>,
+    pub node: &'static Node<T>,
 }
 
 impl<T> Box<T> {
-    pub(crate) fn new(node: &'static mut Node<T>) -> Self {
+    pub(crate) fn new(node: &'static Node<T>) -> Self {
         Self { node }
     }
 }
@@ -23,13 +22,13 @@ impl<T> Deref for Box<T> {
     type Target = T;
 
     fn deref(&self) -> &Self::Target {
-        &self.node.data
+        self.node.as_ref()
     }
 }
 
 impl<T> DerefMut for Box<T> {
     fn deref_mut(&mut self) -> &mut Self::Target {
-        &mut self.node.data
+        self.node.as_mut_ref()
     }
 }
 
@@ -38,7 +37,8 @@ impl<T> Drop for Box<T> {
         if cfg!(feature = "trace_semihost") {
             hprintln!("drop (@box {:p}", self);
         }
-        let stack: &Stack = unsafe { transmute(self.node.next) };
+        let stack: &Stack = unsafe { transmute(self.node.next.get()) };
+
         stack.push(self.node);
     }
 }
