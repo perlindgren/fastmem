@@ -13,4 +13,6 @@ version = "0.5.0"
 
 [features]
 # tracing of freemem internals using semihosting on target
-trace_semihost = []
+trace_std = []
+trace_semi = []
+

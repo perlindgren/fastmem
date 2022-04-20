@@ -1,4 +1,4 @@
-// #![cfg_attr(all(not(test), no_std)]
+#![cfg_attr(not(test), no_std)]
 use core::{
     cell::{Cell, UnsafeCell},
     mem::{align_of, size_of, transmute, MaybeUninit},
@@ -11,6 +11,27 @@ mod stack;
 
 pub use my_box::*;
 pub use stack::*;
+
+#[macro_export]
+#[cfg(feature = "trace_semi")]
+macro_rules! trace {
+    ($($l:tt)*) => {
+        hprintln!($($l)*);
+    };
+}
+#[cfg(feature = "trace_std")]
+macro_rules! trace {
+    ($($l:tt)*) => {
+        println!($($l)*);
+    };
+}
+
+#[cfg(not(any(feature = "trace_std", feature = "trace_semi")))]
+macro_rules! trace {
+    ($($l:tt)*) => {};
+}
+
+pub(crate) use trace;
 
 /// Uninitialized representation of backing storage.
 ///
@@ -43,6 +64,7 @@ impl<const N: usize, const S: usize> FastMemStore<N, S> {
     /// Initialize the storage and returns a FastMem reference.
     pub fn init(&'static self) -> &FastMem<N, S> {
         // Check that the heap size is usize aligned
+        trace!("init");
         assert_eq!(N % size_of::<usize>(), 0);
 
         let free_stacks = unsafe { &*self.stacks.as_ptr() };
@@ -89,7 +111,7 @@ impl<const N: usize, const S: usize> FastMem<N, S> {
         let new_start = start + aligned_size - pad;
 
         if cfg!(feature = "trace_semihost") {
-            hprintln!(
+            trace!(
                 "alloc: start {:#x}, size<T> {:#x}, index {}, aligned_size {:#x}, pad {:#x}, new_start {:#x}",
                 start,
                 size_of::<T>(),
@@ -100,7 +122,7 @@ impl<const N: usize, const S: usize> FastMem<N, S> {
             );
         }
 
-        println!(
+        trace!(
                 "alloc: start {:#x}, size<T> {:#x}, index {}, aligned_size {:#x}, pad {:#x}, new_start {:x}",
                 start,
                 size_of::<T>(),
@@ -131,7 +153,7 @@ impl<const N: usize, const S: usize> FastMem<N, S> {
     #[inline(always)]
     fn alloc_node<T>(&'static self) -> Option<&mut Node<T>> {
         let new_end = self.end.get() - size_of::<Node<T>>();
-        println!(
+        trace!(
             "alloc_node: start {:x}, end {:x}, new_end {:x}",
             self.start.get(),
             self.end.get(),
@@ -163,21 +185,14 @@ impl<const N: usize, const S: usize> FastMem<N, S> {
     #[inline(always)]
     pub fn try_new<T>(&'static self, t: T) -> Option<Box<T>> {
         let index = 32 - (((size_of::<T>() - 1) as u32).leading_zeros() as usize);
-        println!("index {}", index);
+        trace!("try_new, box index {}", index);
 
         let stack = &self.stacks[index];
-        if cfg!(feature = "trace_semihost") {
-            hprintln!("box_new index {}", index);
-        }
+
         let node: &Node<T> = match stack.pop() {
             Some(node) => {
-                println!("found node");
-                if cfg!(feature = "trace_semihost") {
-                    hprintln!("box found @{:p}", node);
-                };
-
-                println!("node @{:p}, : {}", node, node);
-                println!("node.ptr {:#x}", node.ptr_as_ref() as *const _ as usize);
+                trace!("node @{:p}, : {}", node, node);
+                trace!("node.ptr {:#x}", node.ptr_as_ref() as *const _ as usize);
 
                 // check alignment of data
                 if node.ptr_as_ref() as *const _ as usize % align_of::<T>() != 0 {
@@ -188,11 +203,9 @@ impl<const N: usize, const S: usize> FastMem<N, S> {
             }
             None => {
                 // new allocation
-                println!("new alloc");
+                trace!("new alloc");
                 let (data, index): (&mut T, _) = self.alloc(index)?;
                 let node: &mut Node<T> = self.alloc_node()?;
-
-                // let stack: &Stack = unsafe { transmute(&self.stacks[index]) };
 
                 node.ptr = NonNull::new(data);
                 node.next.set(unsafe { transmute(&self.stacks[index]) });
@@ -202,13 +215,13 @@ impl<const N: usize, const S: usize> FastMem<N, S> {
         };
 
         let data_ptr: &mut T = node.ptr_as_mut_ref();
-        println!("data_ptr {:p}", data_ptr);
-        println!("next {:p}", node.next.as_ptr());
-        println!("node {}", node);
+        trace!("data_ptr {:p}", data_ptr);
+        trace!("next {:p}", node.next.as_ptr());
+        trace!("node {}", node);
 
         *data_ptr = t;
         node.next.set(unsafe { transmute(&self.stacks[index]) });
-        println!("assigned");
+        trace!("assigned");
         Some(Box::new(node))
     }
 }

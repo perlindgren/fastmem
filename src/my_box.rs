@@ -1,8 +1,8 @@
 use crate::stack::{Node, Stack};
 
+use crate::trace;
 use core::mem::transmute;
 use core::ops::{Deref, DerefMut, Drop};
-use cortex_m_semihosting::hprintln;
 
 #[derive(Debug)]
 pub struct Box<T>
@@ -34,12 +34,9 @@ impl<T> DerefMut for Box<T> {
 
 impl<T> Drop for Box<T> {
     fn drop(&mut self) {
-        if cfg!(feature = "trace_semihost") {
-            hprintln!("drop (@box {:p}", self);
-        }
-        println!("drop @box {:p}", self);
-        println!("drop node {}", self.node);
-        println!("drop next {:p}", self.node.next.as_ptr());
+        trace!("drop @box {:p}", self);
+        trace!("drop node {}", self.node);
+        trace!("drop next {:p}", self.node.next.as_ptr());
 
         let stack: &Stack = unsafe { transmute(self.node.next.get()) };
 

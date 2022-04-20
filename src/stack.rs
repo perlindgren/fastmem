@@ -1,19 +1,13 @@
-use core::cell::Cell;
-use core::fmt;
-use core::mem::transmute;
-use core::ptr::NonNull;
+use core::{cell::Cell, fmt, mem::transmute, ptr::NonNull};
 
 type Erased = ();
 
 #[derive(Clone, Debug, PartialEq)]
 #[repr(C)]
-// pub(crate) struct Node<T> {
-//     pub(crate) next: Option<NonNull<usize>>,
-//     pub(crate) data: T,
-// }
-
 pub struct Node<T> {
+    // Non-null pointer to data
     pub ptr: Option<NonNull<T>>,
+    // Mutable non-null pointer to next node or head of stack
     pub next: Cell<Option<NonNull<Node<T>>>>,
 }
 
@@ -26,16 +20,13 @@ impl<T> Node<T> {
         }
     }
 
-    // #[inline(always)]
-    // unsafe fn erase_mut(&mut self) -> &mut Node<Erased> {
-    //     transmute(self)
-    // }
-
     #[inline(always)]
     unsafe fn erase(&self) -> &Node<Erased> {
         transmute(self)
     }
 
+    // Safety:
+    // Data pointed to by `ptr` is always mutable
     #[inline(always)]
     pub(crate) fn ptr_as_mut_ref(&self) -> &mut T {
         unsafe { transmute(self.ptr) }
@@ -48,11 +39,8 @@ impl<T> Node<T> {
 }
 
 impl Node<Erased> {
-    // #[inline(always)]
-    // unsafe fn restore_mut<T>(&mut self) -> &Node<T> {
-    //     transmute(self)
-    // }
-
+    // Safety:
+    // `Node.ptr` must always point a valid allocation for `T`
     #[inline(always)]
     unsafe fn restore<T>(&self) -> &Node<T> {
         transmute(self)
@@ -90,7 +78,7 @@ impl Stack {
     pub(crate) fn pop<T>(&self) -> Option<&Node<T>> {
         match self.head.get() {
             Some(node) => {
-                // treat the NonNull<Node<T>> as &Node<T>
+                // treat the NonNull<Node<Erased>> as &Node<Erased>
                 let node = unsafe { node.as_ref() };
 
                 // update head of stack
@@ -107,7 +95,7 @@ impl Stack {
 #[cfg(test)]
 mod test {
     use super::*;
-    use core::mem::{align_of_val, size_of, size_of_val};
+    use core::mem::{size_of, size_of_val};
 
     #[test]
     fn test_size_list() {
