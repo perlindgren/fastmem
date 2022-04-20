@@ -103,56 +103,46 @@ impl<const N: usize, const S: usize> FastMem<N, S> {
     //   (ensured by new below)
     // - OOM results in None
     #[inline(always)]
-    fn alloc<T>(&'static self, index: usize) -> Option<(&mut T, usize)> {
+    fn alloc<T>(&'static self, index: usize) -> Option<&mut T> {
         let aligned_size = 1 << index;
 
         let start = self.start.get();
         let pad = start % aligned_size;
-        let new_start = start + aligned_size - pad;
-
-        if cfg!(feature = "trace_semihost") {
-            trace!(
-                "alloc: start {:#x}, size<T> {:#x}, index {}, aligned_size {:#x}, pad {:#x}, new_start {:#x}",
-                start,
-                size_of::<T>(),
-                index,
-                aligned_size,
-                pad,
-                new_start
-            );
-        }
+        let aligned_start = start + aligned_size - pad;
+        let aligned_end = aligned_start + aligned_size;
 
         trace!(
-                "alloc: start {:#x}, size<T> {:#x}, index {}, aligned_size {:#x}, pad {:#x}, new_start {:x}",
+                "alloc: start {:#x}, size<T> {:#x}, index {}, aligned_size {:#x}, pad {:#x}, aligned_start {:x}, aligned_end {:x}",
                 start,
                 size_of::<T>(),
                 index,
                 aligned_size,
                 pad,
-                new_start
+                aligned_start,
+                aligned_end,
             );
 
-        if new_start > self.end.get() {
+        if aligned_end > self.end.get() {
             None
         } else {
-            let ptr: &mut T = unsafe { transmute(start) };
+            let ptr: &mut T = unsafe { transmute(aligned_start) };
 
-            self.start.set(new_start);
-            Some((ptr, index))
+            self.start.set(aligned_end);
+            Some(ptr)
         }
     }
 
     // alloc_node
     //
-    // Allocate a Node<T> from top of heap
+    // Allocate a Node from top of heap
     //
     // Safety:
-    // - Node<T> needs to be initialized (ensured on use)
-    // - `end` is usize aligned
+    // - Node needs to be initialized (ensured on use)
+    // - `self.end` is usize aligned
     // - OOM results in None
     #[inline(always)]
-    fn alloc_node<T>(&'static self) -> Option<&mut Node<T>> {
-        let new_end = self.end.get() - size_of::<Node<T>>();
+    fn alloc_node(&'static self) -> Option<&mut Node> {
+        let new_end = self.end.get() - size_of::<Node>();
         trace!(
             "alloc_node: start {:x}, end {:x}, new_end {:x}",
             self.start.get(),
@@ -164,7 +154,7 @@ impl<const N: usize, const S: usize> FastMem<N, S> {
         } else {
             {
                 self.end.set(new_end);
-                let node: &mut Node<T> = unsafe { transmute(new_end) };
+                let node: &mut Node = unsafe { transmute(new_end) };
                 Some(node)
             }
         }
@@ -189,13 +179,12 @@ impl<const N: usize, const S: usize> FastMem<N, S> {
 
         let stack = &self.stacks[index];
 
-        let node: &Node<T> = match stack.pop() {
+        let node: &Node = match stack.pop() {
             Some(node) => {
                 trace!("node @{:p}, : {}", node, node);
-                trace!("node.ptr {:#x}", node.ptr_as_ref() as *const _ as usize);
 
-                // check alignment of data
-                if node.ptr_as_ref() as *const _ as usize % align_of::<T>() != 0 {
+                // check alignment of data, can be removed later
+                if node as *const _ as usize % align_of::<T>() != 0 {
                     panic!("illegal alignment @{:p}", node);
                 };
 
@@ -204,11 +193,10 @@ impl<const N: usize, const S: usize> FastMem<N, S> {
             None => {
                 // new allocation
                 trace!("new alloc");
-                let (data, index): (&mut T, _) = self.alloc(index)?;
-                let node: &mut Node<T> = self.alloc_node()?;
+                let ptr: &mut T = self.alloc(index)?;
+                let node: &mut Node = self.alloc_node()?;
 
-                node.ptr = NonNull::new(data);
-                node.next.set(unsafe { transmute(&self.stacks[index]) });
+                node.ptr = NonNull::new(unsafe { transmute(ptr) });
 
                 node
             }
@@ -220,7 +208,7 @@ impl<const N: usize, const S: usize> FastMem<N, S> {
         trace!("node {}", node);
 
         *data_ptr = t;
-        node.next.set(unsafe { transmute(&self.stacks[index]) });
+        node.next.set(unsafe { transmute(stack) });
         trace!("assigned");
         Some(Box::new(node))
     }
@@ -573,18 +561,29 @@ mod test_lib {
         let fm: &'static _ = FM_STORE.init();
 
         #[repr(C, align(8))]
-        struct A {
+        struct A8 {
             u8: u8,
         }
 
-        let a = fm.new(A { u8: 0 });
+        #[repr(C, align(32))]
+        struct A32 {
+            u8: u8,
+        }
 
-        assert_eq!(size_of_val(a.node.ptr_as_ref()), 8);
+        // let a8 = fm.new(A8 { u8: 0 });
+        // assert_eq!(size_of_val(&a8.u8), 1);
+        // assert_eq!(size_of_val(&*a8), 8);
+        // assert_eq!(align_of_val(&*a8), 8);
 
-        drop(a);
+        let a32 = fm.new(A32 { u8: 0 });
+        assert_eq!(size_of_val(&a32.u8), 1);
+        assert_eq!(size_of_val(&*a32), 32);
+        assert_eq!(align_of_val(&*a32), 32);
 
-        let a1 = fm.new(A { u8: 0 });
-        let a2 = fm.new(A { u8: 0 });
-        let a3 = fm.new(A { u8: 0 });
+        // drop(a);
+
+        // let a1 = fm.new(A { u8: 0 });
+        // let a2 = fm.new(A { u8: 0 });
+        // let a3 = fm.new(A { u8: 0 });
     }
 }

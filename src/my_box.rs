@@ -1,6 +1,7 @@
 use crate::stack::{Node, Stack};
 
 use crate::trace;
+use core::marker::PhantomData;
 use core::mem::transmute;
 use core::ops::{Deref, DerefMut, Drop};
 
@@ -9,12 +10,18 @@ pub struct Box<T>
 where
     T: 'static,
 {
-    pub node: &'static Node<T>,
+    pub node: &'static Node,
+    /* pub stack: &'static Stack, */
+    _marker: PhantomData<T>,
 }
 
 impl<T> Box<T> {
-    pub(crate) fn new(node: &'static Node<T>) -> Self {
-        Self { node }
+    pub(crate) fn new(node: &'static Node /* stack: &'static Stack */) -> Self {
+        Self {
+            node,
+            /* stack, */
+            _marker: PhantomData,
+        }
     }
 }
 
@@ -41,6 +48,8 @@ impl<T> Drop for Box<T> {
         let stack: &Stack = unsafe { transmute(self.node.next.get()) };
 
         stack.push(self.node);
+
+        /* self.stack.push(self.node); */
     }
 }
 
